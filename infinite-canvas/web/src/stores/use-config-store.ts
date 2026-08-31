@@ -9,44 +9,11 @@ export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
 
-// 图像尺寸控件渲染与取值模式，按模型接口实际接受的 aspectRatio/尺寸字段适配。
-export type ImageSizeMode = "auto" | "ratio" | "pixels" | "ratioOrPixels";
-
-export type ChannelImageParams = {
-    sizeMode?: ImageSizeMode;
-    aspectPresets?: string[];
-    pixelPresets?: string[];
-};
-
 export type ChannelModel = {
     name: string;
     capability: ModelCapability;
     script?: string;
-    imageParams?: ChannelImageParams;
 };
-
-export type ResolvedImageParams = { sizeMode: ImageSizeMode; aspectPresets?: string[]; pixelPresets?: string[] };
-
-/** 解析指定模型的自适应图像参数 schema；未配置时使用默认 ratioOrPixels（保持原有行为）。 */
-export function resolveModelImageParams(config: AiConfig, model: string): ResolvedImageParams {
-    const channel = resolveModelChannel(config, model);
-    const entry = channel?.models.find((item) => item.name === modelOptionName(model));
-    return {
-        sizeMode: entry?.imageParams?.sizeMode || "ratioOrPixels",
-        aspectPresets: entry?.imageParams?.aspectPresets?.length ? entry.imageParams.aspectPresets : undefined,
-        pixelPresets: entry?.imageParams?.pixelPresets?.length ? entry.imageParams.pixelPresets : undefined,
-    };
-}
-
-function normalizeImageParams(value: unknown): ChannelImageParams | undefined {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-    const record = value as Record<string, unknown>;
-    const sizeMode = record.sizeMode === "auto" || record.sizeMode === "ratio" || record.sizeMode === "pixels" || record.sizeMode === "ratioOrPixels" ? record.sizeMode : undefined;
-    const cleanList = (items: unknown) => (Array.isArray(items) ? items.map(String).map((item) => item.trim()).filter(Boolean) : []);
-    const aspectPresets = cleanList(record.aspectPresets);
-    const pixelPresets = cleanList(record.pixelPresets);
-    return sizeMode || aspectPresets.length || pixelPresets.length ? { ...(sizeMode ? { sizeMode } : {}), ...(aspectPresets.length ? { aspectPresets } : {}), ...(pixelPresets.length ? { pixelPresets } : {}) } : undefined;
-}
 
 export type ModelChannel = {
     id: string;
@@ -305,8 +272,7 @@ export function normalizeChannelModels(models: Array<string | ChannelModel> | un
         seen.add(name);
         const capability = typeof item === "string" ? guessCapability(name) : item.capability || guessCapability(name);
         const script = typeof item === "string" ? undefined : item.script?.trim() || undefined;
-        const imageParams = typeof item === "string" ? undefined : normalizeImageParams(item.imageParams);
-        result.push({ name, capability, script, imageParams });
+        result.push({ name, capability, script });
     }
     return result;
 }
