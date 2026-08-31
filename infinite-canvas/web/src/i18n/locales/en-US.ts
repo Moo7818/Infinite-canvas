@@ -30,7 +30,7 @@ export default {
     },
     settingsPanels: {
         common: { auto: "Auto", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high" },
-        image: { title: "Image settings", quality: "Quality", size: "Size", align16: "Align to multiples of 16", align16Hint: "Round dimensions up to the next multiple of 16 after input", aspectRatio: "Aspect ratio", transparent: "Transparent background", transparentHint: "Generate an image without a background when supported by the model", count: "Image count", images: "{{count}} images" },
+        image: { title: "Image settings", quality: "Quality", size: "Size", align16: "Align to multiples of 16", align16Hint: "Round dimensions up to the next multiple of 16 after input", aspectRatio: "Aspect ratio", transparent: "Transparent background", transparentHint: "Generate an image without a background when supported by the model", count: "Image count", images: "{{count}} images", customParams: "Custom parameters" },
         video: { title: "Video settings", quality: "Quality", size: "Size", seconds: "Seconds", resolution: "Resolution", ratio: "Aspect ratio", duration: "Duration", smart: "Smart", output: "Output", generateAudio: "Generate audio", watermark: "Add watermark", adaptive: "Adaptive", sizes: { landscape: "Landscape", portrait: "Portrait", square: "Square", widescreen: "Widescreen", tall: "Tall", auto: "Auto" }, ratios: { landscape: "Landscape", portrait: "Portrait", square: "Square", standardLandscape: "Standard landscape", standardPortrait: "Standard portrait", cinematic: "Cinematic", adaptive: "Adaptive" } },
         audio: { title: "Audio settings", voice: "Voice", format: "Format", speed: "Speed", instructions: "Voice instructions", instructionsPlaceholder: "For example: natural, warm, and suitable for narration." },
         text: { title: "Text settings", reasoning: "Reasoning effort", count: "Generation count" },
@@ -489,6 +489,17 @@ export default {
             selectModels: "Select models",
             scriptReady: "Script set",
             script: "Request script",
+            customParams: "Custom params",
+            customParamsReady: "Custom params set",
+            customParamsModal: {
+                title: "Custom parameters",
+                hint: "The canvas node renders pickers from these; values are passed as params.<key> to the request script. Only effective for models with a request script.",
+                key: "Key",
+                label: "Label",
+                options: "Options (comma-separated)",
+                add: "Add parameter",
+                types: { select: "Select", number: "Number", text: "Text" },
+            },
             empty: "Select models to fetch or manually add models.",
             capabilities: {
                 image: "Image",

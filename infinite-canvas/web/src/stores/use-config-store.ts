@@ -9,10 +9,17 @@ export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
 
+// 渠道模型自定义参数控件：画布节点按此动态渲染，值经 params.<key> 透传给模型脚本。
+export type CustomParamControl =
+    | { key: string; label: string; type: "select"; options: string[]; placeholder?: string }
+    | { key: string; label: string; type: "number"; min?: number; max?: number }
+    | { key: string; label: string; type: "text"; placeholder?: string };
+
 export type ChannelModel = {
     name: string;
     capability: ModelCapability;
     script?: string;
+    customParams?: CustomParamControl[];
 };
 
 export type ModelChannel = {
@@ -51,6 +58,7 @@ export type AiConfig = {
     background: string;
     count: string;
     canvasImageCount: string;
+    customParams?: Record<string, string>;
 };
 
 export type WebdavSyncConfig = {
@@ -250,6 +258,7 @@ export const useConfigStore = create<ConfigStore>()(
                         videoGenerateAudio: config.videoGenerateAudio || "true",
                         videoWatermark: config.videoWatermark || "false",
                         canvasImageCount: config.canvasImageCount || "3",
+                    customParams: persistedConfig.customParams || {},
                     },
                 };
             },
@@ -272,9 +281,46 @@ export function normalizeChannelModels(models: Array<string | ChannelModel> | un
         seen.add(name);
         const capability = typeof item === "string" ? guessCapability(name) : item.capability || guessCapability(name);
         const script = typeof item === "string" ? undefined : item.script?.trim() || undefined;
-        result.push({ name, capability, script });
+        const customParams = typeof item === "string" ? undefined : normalizeCustomParams(item.customParams);
+        result.push({ name, capability, script, customParams });
     }
     return result;
+}
+
+/** 按模型解析自定义参数控件列表；未声明时返回空数组（保持原固定面板）。 */
+export function resolveModelCustomParams(config: AiConfig, model: string): CustomParamControl[] {
+    const channel = resolveModelChannel(config, model);
+    const entry = channel?.models.find((item) => item.name === modelOptionName(model));
+    return entry?.customParams?.length ? entry.customParams : [];
+}
+
+function normalizeCustomParams(value: unknown): CustomParamControl[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const controls: CustomParamControl[] = [];
+    for (const item of value) {
+        const control = normalizeCustomParam(item);
+        if (control) controls.push(control);
+    }
+    return controls.length ? controls : undefined;
+}
+
+function normalizeCustomParam(item: unknown): CustomParamControl | null {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    const record = item as Record<string, unknown>;
+    const key = String(record.key || "").trim();
+    const label = String(record.label || "").trim();
+    if (!key || !label) return null;
+    if (record.type === "select") {
+        const options = Array.isArray(record.options) ? record.options.map(String).map((option) => option.trim()).filter(Boolean) : [];
+        return options.length ? { key, label, type: "select", options } : null;
+    }
+    if (record.type === "number") {
+        return { key, label, type: "number", ...(typeof record.min === "number" ? { min: record.min } : {}), ...(typeof record.max === "number" ? { max: record.max } : {}) };
+    }
+    if (record.type === "text") {
+        return typeof record.placeholder === "string" ? { key, label, type: "text", placeholder: record.placeholder } : { key, label, type: "text" };
+    }
+    return null;
 }
 
 export function createModelChannel(channel?: Partial<ModelChannel>): ModelChannel {
