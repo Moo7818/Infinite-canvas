@@ -496,7 +496,7 @@ export default {
                 hint: "画布节点按此动态渲染参数选择器，取值以 params.参数键 传给调用脚本；仅对配置了调用脚本的模型生效。",
                 key: "参数键",
                 label: "名称",
-                options: "选项（逗号分隔）",
+                options: "选项（逗号分隔；显示比例、发送像素可写 label=value，如 16:9=2048x1152）",
                 add: "添加参数",
                 types: { select: "下拉", number: "数字", text: "文本" },
             },

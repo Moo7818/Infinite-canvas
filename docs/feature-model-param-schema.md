@@ -50,9 +50,13 @@ AiConfig.customParams?: Record<string, string>;   // 取值；节点级 metadata
 - 文档：`infinite-canvas/CHANGELOG.md:Unreleased`、`progress/pending-test.{mdx,zh-CN.mdx}`
 - 导入表：`docs/grsai-channel-import.json`
 
+## 像素↔比例换算显示
+
+`select` 的 options 支持 `label=value`：面板展示 `label`（如换算后的比例 `16:9`），脚本收到的 `params.aspectRatio` 是 `value`（vip 要求的像素 `2048x1152`）。`gpt-image-2` 直接 value=比例（接口支持比例）；`gpt-image-2-vip` 全部用 `label=value`（按文档 VIP 比例参考表 1K/2K/4K 档位）。编辑器 options 框按 `label=value` 写法，逐项即显示比例、传输像素。
+
 ## 验收
 
 - 未配置 customParams 的模型：面板行为与回退前完全一致（回归）
-- `gpt-image-2-vip` 配 pixel 档：节点图像设置只显示像素按钮组，无质量/比例/透明区
+- `gpt-image-2-vip` 配 pixel 档：节点图像设置只显示按钮组（`label=value`，如 `16:9=2048x1152`，展示比例、传输像素），无质量/比例/透明区
 - 渠道编辑保存后刷新保持；节点取值透传脚本 `params.aspectRatio`
 - `bun run typecheck` 绿

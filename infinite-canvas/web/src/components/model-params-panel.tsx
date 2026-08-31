@@ -1,5 +1,12 @@
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import { resolveModelCustomParams, type AiConfig, type CustomParamControl } from "@/stores/use-config-store";
+import { resolveModelCustomParams, type AiConfig, type CustomParamControl, type CustomParamOption } from "@/stores/use-config-store";
+
+function optionValue(option: CustomParamOption) {
+    return typeof option === "string" ? option : option.value;
+}
+function optionLabel(option: CustomParamOption) {
+    return typeof option === "string" ? option : option.label || option.value;
+}
 
 type ModelParamsPanelProps = {
     config: AiConfig;
@@ -25,7 +32,14 @@ export function customParamsSummary(config: AiConfig) {
     const controls = resolveModelCustomParams(config, config.model);
     if (!controls.length) return "";
     const values = config.customParams || {};
-    return controls.map((control) => `${control.label} ${values[control.key] || ""}`.trim()).filter(Boolean).join(" · ");
+    return controls
+        .map((control) => {
+            const current = values[control.key] || "";
+            const matched = control.type === "select" ? control.options.find((option) => optionValue(option) === current) : undefined;
+            return `${control.label} ${matched ? optionLabel(matched) : current}`.trim();
+        })
+        .filter(Boolean)
+        .join(" · ");
 }
 
 function ControlRow({ control, value, theme, onChange }: { control: CustomParamControl; value: string; theme: CanvasTheme; onChange: (key: string, value: string) => void }) {
@@ -38,14 +52,14 @@ function ControlRow({ control, value, theme, onChange }: { control: CustomParamC
                 <div className="grid grid-cols-4 gap-2">
                     {control.options.map((option) => (
                         <button
-                            key={option}
+                            key={optionValue(option)}
                             type="button"
                             className="h-9 cursor-pointer rounded-full border px-2 text-sm transition hover:opacity-80"
-                            style={{ background: "transparent", borderColor: value === option ? theme.node.text : theme.node.stroke, color: theme.node.text }}
+                            style={{ background: "transparent", borderColor: value === optionValue(option) ? theme.node.text : theme.node.stroke, color: theme.node.text }}
                             onMouseDown={(event) => event.stopPropagation()}
-                            onClick={() => onChange(control.key, option)}
+                            onClick={() => onChange(control.key, optionValue(option))}
                         >
-                            {option}
+                            {optionLabel(option)}
                         </button>
                     ))}
                 </div>

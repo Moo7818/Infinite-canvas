@@ -496,7 +496,7 @@ export default {
                 hint: "The canvas node renders pickers from these; values are passed as params.<key> to the request script. Only effective for models with a request script.",
                 key: "Key",
                 label: "Label",
-                options: "Options (comma-separated)",
+                options: "Options (comma-separated; use label=value to display a ratio and send pixels, e.g. 16:9=2048x1152)",
                 add: "Add parameter",
                 types: { select: "Select", number: "Number", text: "Text" },
             },

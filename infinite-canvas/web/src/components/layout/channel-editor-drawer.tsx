@@ -3,7 +3,7 @@ import { ListPlus, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { defaultBaseUrlForApiFormat, guessCapability, normalizeChannelModels, type ApiCallFormat, type ChannelModel, type CustomParamControl, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
+import { defaultBaseUrlForApiFormat, guessCapability, normalizeChannelModels, type ApiCallFormat, type ChannelModel, type CustomParamControl, type CustomParamOption, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
 import { ModelScriptEditor } from "./model-script-editor";
 import { ModelSelectModal } from "./model-select-modal";
 
@@ -68,7 +68,14 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                 const label = row.label.trim();
                 if (!key || !label) return null;
                 if (row.type === "select") {
-                    const options = row.optionsText.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean);
+                    const options: CustomParamOption[] = row.optionsText
+                        .split(/[,，\n]/)
+                        .map((item) => item.trim())
+                        .filter(Boolean)
+                        .map((item) => {
+                            const match = item.match(/^([^=]+)=(.*)$/);
+                            return match ? { label: match[1].trim(), value: match[2].trim() } : item;
+                        });
                     return options.length ? { key, label, type: "select", options } : null;
                 }
                 return { key, label, type: row.type };

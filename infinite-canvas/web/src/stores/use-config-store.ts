@@ -10,8 +10,10 @@ export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
 
 // 渠道模型自定义参数控件：画布节点按此动态渲染，值经 params.<key> 透传给模型脚本。
+// select 的 options 支持 "label=value"：面板展示 label（如换算后的比例），发送 value（如像素档位）。
+export type CustomParamOption = string | { value: string; label?: string };
 export type CustomParamControl =
-    | { key: string; label: string; type: "select"; options: string[]; placeholder?: string }
+    | { key: string; label: string; type: "select"; options: CustomParamOption[]; placeholder?: string }
     | { key: string; label: string; type: "number"; min?: number; max?: number }
     | { key: string; label: string; type: "text"; placeholder?: string };
 
@@ -304,6 +306,25 @@ function normalizeCustomParams(value: unknown): CustomParamControl[] | undefined
     return controls.length ? controls : undefined;
 }
 
+function normalizeSelectOptions(items: unknown[]): CustomParamOption[] {
+    const options: CustomParamOption[] = [];
+    for (const item of items) {
+        if (typeof item === "string") {
+            const value = item.trim();
+            if (value) options.push(value);
+            continue;
+        }
+        if (item && typeof item === "object" && !Array.isArray(item)) {
+            const record = item as Record<string, unknown>;
+            const value = String(record.value ?? "").trim();
+            if (!value) continue;
+            const label = typeof record.label === "string" ? record.label.trim() : "";
+            options.push(label ? { value, label } : { value });
+        }
+    }
+    return options;
+}
+
 function normalizeCustomParam(item: unknown): CustomParamControl | null {
     if (!item || typeof item !== "object" || Array.isArray(item)) return null;
     const record = item as Record<string, unknown>;
@@ -311,7 +332,7 @@ function normalizeCustomParam(item: unknown): CustomParamControl | null {
     const label = String(record.label || "").trim();
     if (!key || !label) return null;
     if (record.type === "select") {
-        const options = Array.isArray(record.options) ? record.options.map(String).map((option) => option.trim()).filter(Boolean) : [];
+        const options = Array.isArray(record.options) ? normalizeSelectOptions(record.options) : [];
         return options.length ? { key, label, type: "select", options } : null;
     }
     if (record.type === "number") {
