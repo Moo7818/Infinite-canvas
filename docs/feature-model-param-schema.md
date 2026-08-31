@@ -50,13 +50,15 @@ AiConfig.customParams?: Record<string, string>;   // 取值；节点级 metadata
 - 文档：`infinite-canvas/CHANGELOG.md:Unreleased`、`progress/pending-test.{mdx,zh-CN.mdx}`
 - 导入表：`docs/grsai-channel-import.json`
 
-## 像素↔比例换算显示
+## 比例 + 分辨率 → 像素（脚本换算）
 
-`select` 的 options 支持 `label=value`：面板展示 `label`（如换算后的比例 `16:9`），脚本收到的 `params.aspectRatio` 是 `value`（vip 要求的像素 `2048x1152`）。`gpt-image-2` 直接 value=比例（接口支持比例）；`gpt-image-2-vip` 全部用 `label=value`（按文档 VIP 比例参考表 1K/2K/4K 档位）。编辑器 options 框按 `label=value` 写法，逐项即显示比例、传输像素。
+vip 模型 UI 只暴露两个枚举控件：`aspectRatio`（比例列表）与 `resolution`（1K/2K/4K），由**调用脚本**按文档「VIP 比例参考表」把 比例×档位 换算成像素后填入 `aspectRatio`（`vipPixels()` 查表，兜底 `2048x2048`）。`gpt-image-2` 接口接受比例，脚本直接透传 `params.aspectRatio`。
+
+`select` options 另保留 `label=value` 语法（面板显示 label、发送 value），供无脚本换算需求的模型直接枚举「显示值=发送值」。
 
 ## 验收
 
 - 未配置 customParams 的模型：面板行为与回退前完全一致（回归）
-- `gpt-image-2-vip` 配 pixel 档：节点图像设置只显示按钮组（`label=value`，如 `16:9=2048x1152`，展示比例、传输像素），无质量/比例/透明区
+- `gpt-image-2-vip`：节点图像设置只显示「比例」+「分辨率」两组枚举（无质量/透明区），脚本按文档 VIP 表换算为像素后请求成功
 - 渠道编辑保存后刷新保持；节点取值透传脚本 `params.aspectRatio`
 - `bun run typecheck` 绿
