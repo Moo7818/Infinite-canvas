@@ -21,6 +21,8 @@
 | 分支策略 | `docs/git-branch-strategy.md:1` |
 | 架构/技术栈/产品/路线 | `docs/architecture.md:1`, `docs/tech-stack.md:1`, `docs/product-design.md:1`, `docs/roadmap.md:1` |
 | 人机视频工厂背景 | `docs/project-background.md:1` |
+| 文档总览索引 | `docs/index.md:1`（唯一不沉底的全量索引） |
+| 人机视频工厂背景 | `docs/project-background.md:1` |
 
 ## 约束
 
