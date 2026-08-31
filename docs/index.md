@@ -21,6 +21,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| [功能：动态模型参数 schema](./feature-model-param-schema.md) | **新增** 画布节点按模型 `imageParams` 声明动态渲染参数选择器 |
 | [项目背景：人机共创视频工厂](./project-background.md) | 全流程人机共创目标、资产统一模型、阶段化UI+终局画布+opencode编排 |
 | [架构设计](./architecture.md) | 分层架构、数据流、画布引擎、Agent/插件子系统 |
 | [技术栈](./tech-stack.md) | 前端/本地Agent/构建/持久化/依赖可信度 |

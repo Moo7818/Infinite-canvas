@@ -1,19 +1,24 @@
-import { Button, Drawer, Input, Segmented, Select, Space } from "antd";
-import { ListPlus, Trash2 } from "lucide-react";
+import { Button, Drawer, Input, Modal, Segmented, Select, Space } from "antd";
+import { ListPlus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { defaultBaseUrlForApiFormat, guessCapability, normalizeChannelModels, type ApiCallFormat, type ChannelModel, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
+import { defaultBaseUrlForApiFormat, guessCapability, normalizeChannelModels, type ApiCallFormat, type ChannelModel, type ImageSizeMode, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
 import { ModelScriptEditor } from "./model-script-editor";
 import { ModelSelectModal } from "./model-select-modal";
 
 type ScriptTarget = { name: string; capability: ModelCapability; value: string };
+type ImageParamsTarget = { name: string; capability: ModelCapability };
 
 export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: boolean; channel: ModelChannel | null; onSave: (channel: ModelChannel) => void; onClose: () => void }) {
     const { t } = useTranslation();
     const [draft, setDraft] = useState<ModelChannel | null>(channel);
     const [selectOpen, setSelectOpen] = useState(false);
     const [scriptTarget, setScriptTarget] = useState<ScriptTarget | null>(null);
+    const [imageParamsTarget, setImageParamsTarget] = useState<ImageParamsTarget | null>(null);
+    const [sizeModeDraft, setSizeModeDraft] = useState<ImageSizeMode>("ratioOrPixels");
+    const [pixelPresetsText, setPixelPresetsText] = useState("");
+    const [aspectPresetsText, setAspectPresetsText] = useState("");
     const apiFormatOptions: Array<{ label: string; value: ApiCallFormat }> = [
         { label: "OpenAI", value: "openai" },
         { label: "Gemini", value: "gemini" },
@@ -42,6 +47,26 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
     const setCapability = (name: string, capability: ModelCapability) => setModels(draft.models.map((model) => (model.name === name ? { ...model, capability } : model)));
     const setScript = (name: string, script: string) => setModels(draft.models.map((model) => (model.name === name ? { ...model, script: script || undefined } : model)));
     const removeModel = (name: string) => setModels(draft.models.filter((model) => model.name !== name));
+
+    const openImageParams = (target: ImageParamsTarget) => {
+        const entry = draft.models.find((model) => model.name === target.name);
+        const params = entry?.imageParams || {};
+        setSizeModeDraft(params.sizeMode || "ratioOrPixels");
+        setPixelPresetsText((params.pixelPresets || []).join(", "));
+        setAspectPresetsText((params.aspectPresets || []).join(", "));
+        setImageParamsTarget(target);
+    };
+    const saveImageParams = () => {
+        if (!imageParamsTarget) return;
+        const splitList = (text: string) => text.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean);
+        const presets = {
+            ...(splitList(aspectPresetsText).length ? { aspectPresets: splitList(aspectPresetsText) } : {}),
+            ...(splitList(pixelPresetsText).length ? { pixelPresets: splitList(pixelPresetsText) } : {}),
+        };
+        setModels(draft.models.map((model) => (model.name === imageParamsTarget!.name ? { ...model, imageParams: { sizeMode: sizeModeDraft, ...presets } } : model)));
+        setImageParamsTarget(null);
+    };
+    const sizeModeOptions: Array<{ label: string; value: ImageSizeMode }> = (["auto", "ratio", "pixels", "ratioOrPixels"] as ImageSizeMode[]).map((value) => ({ value, label: t(`config.channelEditor.sizeMode.${value}`) }));
 
     const save = () => {
         onSave({ ...draft, name: draft.name.trim() || t("config.channels.unnamed"), models: normalizeChannelModels(draft.models) });
@@ -102,6 +127,11 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                             </span>
                             <div className="flex shrink-0 items-center gap-2">
                                 <Segmented size="small" value={model.capability} options={capabilityOptions} onChange={(value) => setCapability(model.name, value as ModelCapability)} />
+                                {model.capability === "image" ? (
+                                    <Button size="small" type={model.imageParams ? "primary" : "default"} ghost={Boolean(model.imageParams)} icon={<SlidersHorizontal className="size-3.5" />} onClick={() => openImageParams({ name: model.name, capability: model.capability })}>
+                                        {t(model.imageParams ? "config.channelEditor.imageParamsReady" : "config.channelEditor.imageParams")}
+                                    </Button>
+                                ) : null}
                                 <Button size="small" type={model.script ? "primary" : "default"} ghost={Boolean(model.script)} onClick={() => setScriptTarget({ name: model.name, capability: model.capability, value: model.script || "" })}>
                                     {t(model.script ? "config.channelEditor.scriptReady" : "config.channelEditor.script")}
                                 </Button>
@@ -115,6 +145,24 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
             </div>
 
             <ModelSelectModal open={selectOpen} channel={draft} selectedNames={draft.models.map((model) => model.name)} onConfirm={applySelection} onClose={() => setSelectOpen(false)} />
+
+            <Modal title={t("config.channelEditor.imageParamsModal.title")} open={Boolean(imageParamsTarget)} width={520} okText={t("common.save")} cancelText={t("common.cancel")} onOk={saveImageParams} onCancel={() => setImageParamsTarget(null)}>
+                <div className="space-y-4 py-2">
+                    <div>
+                        <div className="mb-1 text-sm font-medium">{t("config.channelEditor.sizeMode.sizeModeLabel")}</div>
+                        <Segmented block options={sizeModeOptions} value={sizeModeDraft} onChange={(value) => setSizeModeDraft(value as ImageSizeMode)} />
+                        <div className="mt-1 text-xs text-stone-500">{t("config.channelEditor.imageParamsModal.hint")}</div>
+                    </div>
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-medium">{t("config.channelEditor.imageParamsModal.pixelPresets")}</span>
+                        <Input.TextArea rows={3} value={pixelPresetsText} onChange={(event) => setPixelPresetsText(event.target.value)} placeholder="1024x1024, 2048x2048, 3840x2160" />
+                    </label>
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-medium">{t("config.channelEditor.imageParamsModal.aspectPresets")}</span>
+                        <Input.TextArea rows={2} value={aspectPresetsText} onChange={(event) => setAspectPresetsText(event.target.value)} placeholder="1:1, 16:9, 9:16" />
+                    </label>
+                </div>
+            </Modal>
 
             <ModelScriptEditor
                 open={Boolean(scriptTarget)}
