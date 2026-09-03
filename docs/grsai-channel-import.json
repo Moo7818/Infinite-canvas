@@ -29,6 +29,63 @@
             "script": "const body={model,prompt,images:images||[],aspectRatio:String(params.aspectRatio||\"auto\")};const data=await request({method:\"post\",url:\"/api/generate\",headers:{\"Content-Type\":\"application/json\",Authorization:\"Bearer \"+apiKey},data:body});if(data.status===\"succeeded\"&&(data.results||[]).length){const urls=data.results.map(o=>o.url).filter(Boolean);if(urls.length)return urls;}if(data.status===\"running\"&&data.id){try{return await poll(()=>request({method:\"get\",url:\"/api/generate/query?id=\"+encodeURIComponent(data.id),headers:{Authorization:\"Bearer \"+apiKey}}),s=>s.status===\"succeeded\"?(s.results||[]).map(o=>o.url).filter(Boolean):null,{intervalMs:5000,timeoutMs:1200000});}catch(e){if(String(e.message||\"\").includes(\"404\"))throw new Error(\"异步查询端点未配置，请用 replyType=json 同步模式\");throw e;}}throw new Error(data.error||\"生成失败:status=\"+data.status);"
           },
           {
+            "name": "nano-banana",
+            "capability": "image",
+            "customParams": [
+              {
+                "key": "aspectRatio",
+                "label": "比例",
+                "type": "select",
+                "options": ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9"]
+              },
+              {
+                "key": "imageSize",
+                "label": "分辨率",
+                "type": "select",
+                "options": ["1K", "2K", "4K"]
+              }
+            ],
+            "script": "const body={model,prompt,images:images||[],aspectRatio:String(params.aspectRatio||\"auto\"),imageSize:String(params.imageSize||\"1K\")};const data=await request({method:\"post\",url:\"/api/generate\",headers:{\"Content-Type\":\"application/json\",Authorization:\"Bearer \"+apiKey},data:body});if(data.status===\"succeeded\"&&(data.results||[]).length){const urls=data.results.map(o=>o.url).filter(Boolean);if(urls.length)return urls;}if(data.status===\"running\"&&data.id){try{return await poll(()=>request({method:\"get\",url:\"/api/generate/query?id=\"+encodeURIComponent(data.id),headers:{Authorization:\"Bearer \"+apiKey}}),s=>s.status===\"succeeded\"?(s.results||[]).map(o=>o.url).filter(Boolean):null,{intervalMs:5000,timeoutMs:1200000});}catch(e){if(String(e.message||\"\").includes(\"404\"))throw new Error(\"异步查询端点未配置，请用 replyType=json 同步模式\");throw e;}}throw new Error(data.error||\"生成失败:status=\"+data.status);"
+          },
+          {
+            "name": "nano-banana-2",
+            "capability": "image",
+            "customParams": [
+              {
+                "key": "aspectRatio",
+                "label": "比例",
+                "type": "select",
+                "options": ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9", "1:4", "4:1", "1:8", "8:1"]
+              },
+              {
+                "key": "imageSize",
+                "label": "分辨率",
+                "type": "select",
+                "options": ["1K", "2K", "4K"]
+              }
+            ],
+            "script": "const body={model,prompt,images:images||[],aspectRatio:String(params.aspectRatio||\"auto\"),imageSize:String(params.imageSize||\"1K\")};const data=await request({method:\"post\",url:\"/api/generate\",headers:{\"Content-Type\":\"application/json\",Authorization:\"Bearer \"+apiKey},data:body});if(data.status===\"succeeded\"&&(data.results||[]).length){const urls=data.results.map(o=>o.url).filter(Boolean);if(urls.length)return urls;}if(data.status===\"running\"&&data.id){try{return await poll(()=>request({method:\"get\",url:\"/api/generate/query?id=\"+encodeURIComponent(data.id),headers:{Authorization:\"Bearer \"+apiKey}}),s=>s.status===\"succeeded\"?(s.results||[]).map(o=>o.url).filter(Boolean):null,{intervalMs:5000,timeoutMs:1200000});}catch(e){if(String(e.message||\"\").includes(\"404\"))throw new Error(\"异步查询端点未配置，请用 replyType=json 同步模式\");throw e;}}throw new Error(data.error||\"生成失败:status=\"+data.status);"
+          },
+          {
+            "name": "nano-banana-pro",
+            "capability": "image",
+            "customParams": [
+              {
+                "key": "aspectRatio",
+                "label": "比例",
+                "type": "select",
+                "options": ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9"]
+              },
+              {
+                "key": "imageSize",
+                "label": "分辨率",
+                "type": "select",
+                "options": ["1K", "2K", "4K"]
+              }
+            ],
+            "script": "const body={model,prompt,images:images||[],aspectRatio:String(params.aspectRatio||\"auto\"),imageSize:String(params.imageSize||\"1K\")};const data=await request({method:\"post\",url:\"/api/generate\",headers:{\"Content-Type\":\"application/json\",Authorization:\"Bearer \"+apiKey},data:body});if(data.status===\"succeeded\"&&(data.results||[]).length){const urls=data.results.map(o=>o.url).filter(Boolean);if(urls.length)return urls;}if(data.status===\"running\"&&data.id){try{return await poll(()=>request({method:\"get\",url:\"/api/generate/query?id=\"+encodeURIComponent(data.id),headers:{Authorization:\"Bearer \"+apiKey}}),s=>s.status===\"succeeded\"?(s.results||[]).map(o=>o.url).filter(Boolean):null,{intervalMs:5000,timeoutMs:1200000});}catch(e){if(String(e.message||\"\").includes(\"404\"))throw new Error(\"异步查询端点未配置，请用 replyType=json 同步模式\");throw e;}}throw new Error(data.error||\"生成失败:status=\"+data.status);"
+          },
+          {
             "name": "gpt-image-2-vip",
             "capability": "image",
             "customParams": [
@@ -80,6 +137,9 @@
     "reasoningEffort": "auto",
     "models": [
       "grsai::gpt-image-2",
+      "grsai::nano-banana",
+      "grsai::nano-banana-2",
+      "grsai::nano-banana-pro",
       "grsai::gpt-image-2-vip",
       "default::gpt-image-2",
       "default::grok-imagine-video",

@@ -54,6 +54,8 @@ AiConfig.customParams?: Record<string, string>;   // 取值；节点级 metadata
 
 vip 模型 UI 只暴露两个枚举控件：`aspectRatio`（比例列表）与 `resolution`（1K/2K/4K），由**调用脚本**按文档「VIP 比例参考表」把 比例×档位 换算成像素后填入 `aspectRatio`（`vipPixels()` 查表，兜底 `2048x2048`）。`gpt-image-2` 接口接受比例，脚本直接透传 `params.aspectRatio`。
 
+**nano-banana 系列**（`nano-banana` / `nano-banana-2` / `nano-banana-pro`，同一 `/v1/api/generate`）：接口原生接受 `aspectRatio`（比例枚举，`-2` 系列额外支持 `1:4/4:1/1:8/8:1`）与 `imageSize`（1K/2K/4K），无需换算——customParams 声明两控件，脚本直接透传 `params.aspectRatio + params.imageSize`。
+
 `select` options 另保留 `label=value` 语法（面板显示 label、发送 value），供无脚本换算需求的模型直接枚举「显示值=发送值」。
 
 ## 验收
