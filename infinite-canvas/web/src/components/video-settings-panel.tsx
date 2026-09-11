@@ -3,8 +3,9 @@ import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
+import { ModelParamsPanel } from "@/components/model-params-panel";
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import { type AiConfig } from "@/stores/use-config-store";
+import { resolveModelCustomParams, type AiConfig } from "@/stores/use-config-store";
 
 const resolutionOptions = [
     { value: "720", label: "720p" },
@@ -29,12 +30,13 @@ export const videoSecondOptions = secondOptions.map((value) => String(value));
 type VideoSettingsPanelProps = {
     config: AiConfig;
     onConfigChange: (key: "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark", value: string) => void;
+    onCustomParamsChange?: (key: string, value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
 };
 
-export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
+export function VideoSettingsPanel({ config, onConfigChange, onCustomParamsChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
     const { t } = useTranslation();
     const seconds = config.videoSeconds || "6";
     const size = normalizeVideoSizeValue(config.size);
@@ -96,6 +98,11 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         <NumberInput value={seconds} min={1} max={20} theme={theme} onChange={(value) => onConfigChange("videoSeconds", value)} />
                     </div>
                 </SettingGroup>
+                {onCustomParamsChange && resolveModelCustomParams(config, config.model).length ? (
+                    <SettingGroup title={t("settingsPanels.video.customParams")} color={theme.node.muted}>
+                        <ModelParamsPanel config={config} theme={theme} onValueChange={onCustomParamsChange} />
+                    </SettingGroup>
+                ) : null}
             </div>
         </ImageSettingsTheme>
     );
