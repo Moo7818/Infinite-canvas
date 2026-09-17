@@ -1,33 +1,34 @@
-# 技术栈
+# 技术栈（基于上游 v0.18.0 实测）
 
-## 前端
+## 前端 `infinite-canvas/web`
 
-| 层 | 选型 | 版本锚点 |
-|----|------|----------|
-| 构建 | Vite 7 + `@vitejs/plugin-react` | `infinite-canvas/web/package.json:7` `vite --host 0.0.0.0 --port 3000` + `vite.config.ts:15 localPluginsManifest` |
-| 框架 | React 19 + React Router 7 | `web/package.json:22 react@19.2.5`, `router.tsx:15 createBrowserRouter` |
-| 状态 | Zustand 5 + `persist` + `localforage` | `stores/use-canvas-store.ts:63 canvasStorage`, `use-config-store.ts:192 CONFIG_STORE_KEY` |
-| UI | Ant Design 6 + Tailwind 4 + lucide-react + motion | `web/package.json:21 antd@^6.4.2`, `lib/app-theme.ts` Alias Token |
-| 请求 | axios 1.16 + `buildApiUrl` 直连用户网关 | `services/api/image.ts:1` 915行网关（含OpenAI/Gemini双分支+自定义脚本） |
-| 持久化 | localforage(IndexDB) 主 + localStorage 轻量开关 | `lib/localforage-storage.ts:4`, `services/image-storage.ts:15 storeName:image_files` |
-| 工具 | nanoid, fflate, file-saver, dayjs, i18next, streamdown, codemirror | `web/package.json:14` |
+* Vite 7 + React 19 + React Router 7 + TypeScript 5，包管理 `bun`（`web/package.json:1`，脚本见 `:6`：`dev/build/typecheck/start/format`，`dev/start` 均为 `:3000`）。
+* UI：`antd ^6`（含 pro-components beta）+ Tailwind 4 + `lucide-react`；图标优先 `lucide-react` 或已用 Antd 图标。
+* 状态：`zustand ^5`，全局/跨页状态放 `web/src/stores/`，画布域放 `web/src/stores/canvas/`。
+* 数据请求：`axios`，外部服务统一放 `web/src/services/api/`（`request/image/video/audio/model-plugin/local-proxy/prompts/canvas-agent`），由浏览器直连，不假设项目后端。
+* 持久化：`localforage`（IndexedDB），入口 `web/src/lib/localforage-storage.ts`；`localStorage` 只放极小简单配置。
+* 国际化：`i18next` + `react-i18next`，文案 `web/src/i18n/locales/` 中英双语，页面文案保持中文。
 
-**约束** `AGENTS.md:22-46`：外部请求统一 `services/api/`，全局状态在 `stores/`，业务大JSON禁用 `localStorage`。
+## 本地 Agent `infinite-canvas/canvas-agent`
 
-## 本地 Agent
+* Node + Express + SSE，对外 `http://127.0.0.1:17371`（`src/config.ts:6`，`src/server/http.ts:18`）。
+* 前端经 `web/src/services/api/canvas-agent.ts` 连接；Codex/Claude Code 经 MCP 操作画布。
 
-`infinite-canvas/canvas-agent/package.json:24`：`@openai/codex@0.146.0` + `express@^5.1.0` + `@modelcontextprotocol/sdk` + `winston + zod + gray-matter`，`tsx` 驱动，`node>=18`。`src/version-check.ts:51 npmView` 单次查最新版，`utils/agent-runtime.ts:4 redactAgentLog` 脱敏 `Bearer/sk-`。
+## 本地代理 `infinite-canvas/canvas-proxy`
 
-## 插件 SDK
+* 纯 Node `node:http` 转发，加 CORS 头解决浏览器直连 AI 接口跨域（见 `canvas-proxy/index.js:1` 起）。
 
-`plugins/canvas/sdk/src/define-plugin.ts:14` 仅类型辅助，`types.ts` 镜像宿主类型，`build.mjs` esbuild 单JS 产出，`jsx-runtime.ts` 复用宿主 React。`marked@14 via esm.sh`（Markdown插件 `src/index.tsx:18`）为已知XSS面。
+## 插件 SDK `infinite-canvas/plugins/canvas/sdk`
 
-## 构建与部署
+* TypeScript 契约 + `define-plugin.ts:1` 作者入口；模板 `plugins/canvas/template/`（含 `build.mjs`），注册器 `plugins/canvas/registry/`。
 
-- 两阶段 Docker `infinite-canvas/Dockerfile:2 oven/bun:1.3.13 → nginx:1.27-alpine`，`nginx.conf:7 try_files $uri /index.html` SPA回退，`docker-entrypoint.sh:12 tr -cd 'A-Za-z0-9-'` 消毒分析ID。
-- `bun.lock:58` 约640行指向 `registry.npmmirror.com`，需生产切 `registry.npmjs.org` 并 `--frozen-lockfile`（`AGENTS.md:114`）。
-- 4个 workflow 仅 `push tags v*` 触发，权限最小化 `contents:read + packages:write`，缺 PR 级 `audit/build`（`AGENTS.md:120` 待补 `ci.yml`）。
+## 文档站 `infinite-canvas/docs`
 
-## 关键依赖风险
+* Next 16 + Fumadocs（`docs/package.json:1`，`dev/build/start/types:check`），内容 `docs/content/docs/*.mdx` 中英双版。
 
-`new Function` (`model-plugin.ts:119`)、`Blob import` (`plugin-loader.ts:12`)、`innerHTML` (`svg:70/markdown:61`) 为设计级 RCE/XSS，单用户可接受，多租户需Worker沙箱+DOMPurify（`AGENTS.md:130`）。
+## 部署
+
+* Docker：`bun` 构建 Vite → `nginx:alpine` 托管纯静态（`infinite-canvas/Dockerfile:1`，`EXPOSE 3000`），镜像 `ghcr.io/basketikun/infinite-canvas:latest`（`docker-compose.yml:1`）。
+* Vercel：Vite 预设，`cd web && bun install/build`，SPA 重写到 `index.html`（`vercel.json:1`）。
+* Render：`runtime: docker`，按 Dockerfile 部署（`render.yaml:1`）。
+* 注意：Docker 静态资源路径仍有待办，文档不要过度承诺生产部署已完全验证。

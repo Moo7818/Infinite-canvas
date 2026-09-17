@@ -8,11 +8,10 @@ data/
 *.tsbuildinfo
 .DS_Store
 .idea
-web/dist
 
 **/dist
-web/public/plugins
-plugins/canvas/*/dist
-plugins/canvas/*/node_modules
-web/public/plugins# root docs build artifacts
+infinite-canvas/web/public/plugins
+infinite-canvas/plugins/canvas/*/dist
+infinite-canvas/plugins/canvas/*/node_modules
+# root docs build artifacts
 docs/.tmp
