@@ -95,7 +95,7 @@ type GeminiPayload = {
     promptFeedback?: { blockReason?: string };
 };
 type GeminiStreamState = { buffer: string; text: string; toolCalls: ResponseToolCall[]; error?: string };
-type RequestOptions = { signal?: AbortSignal };
+type RequestOptions = { signal?: AbortSignal; onProgress?: (ratio: number) => void };
 
 const QUALITY_BASE: Record<string, number> = {
     low: 1024,
@@ -737,6 +737,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
                 images: [],
                 params: { size: requestSize, quality, count: n, ...(background ? { background } : {}) },
                 signal: options?.signal,
+                onProgress: options?.onProgress,
             });
             return normalizePluginImages(result).map((dataUrl) => ({ id: nanoid(), dataUrl }));
         } catch (error) {
@@ -798,6 +799,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
                 images: refs,
                 params: { size: requestSize, quality, count: n, ...(background ? { background } : {}) },
                 signal: options?.signal,
+                onProgress: options?.onProgress,
             });
             return normalizePluginImages(result).map((dataUrl) => ({ id: nanoid(), dataUrl }));
         } catch (error) {

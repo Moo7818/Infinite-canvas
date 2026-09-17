@@ -31,6 +31,7 @@ export type RunPluginArgs = {
     params?: Record<string, unknown>;
     signal?: AbortSignal;
     onDelta?: (text: string) => void;
+    onProgress?: (ratio: number) => void;
 };
 
 function pluginHeaders(extra?: Record<string, string>, hasJsonBody = false): Record<string, string> {
@@ -96,10 +97,14 @@ function createPoll(signal?: AbortSignal) {
         const intervalMs = options?.intervalMs ?? 2500;
         const timeoutMs = options?.timeoutMs ?? 300000;
         const deadline = performance.now() + timeoutMs;
+        const startedAt = performance.now();
+        let attempt = 0;
         for (;;) {
             if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
             const result = extract(await request());
             if (result !== null && result !== undefined && result !== false) return result;
+            attempt += 1;
+            console.debug("[model-plugin] poll waiting", { attempt, elapsedMs: Math.round(performance.now() - startedAt) });
             if (performance.now() >= deadline) throw new Error(i18n.t("modelPlugin.pollTimeout"));
             await sleep(intervalMs, signal);
         }
@@ -133,6 +138,7 @@ export async function runModelPlugin<T = unknown>(args: RunPluginArgs): Promise<
         "sleep",
         "signal",
         "onDelta",
+        "onProgress",
         `"use strict"; return (async () => {\n${args.script}\n})();`,
     ) as (...fnArgs: unknown[]) => Promise<T>;
     try {
@@ -154,6 +160,7 @@ export async function runModelPlugin<T = unknown>(args: RunPluginArgs): Promise<
             (ms: number) => sleep(ms, args.signal),
             args.signal,
             args.onDelta,
+            args.onProgress || (() => undefined),
         );
     } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") throw error;
@@ -185,6 +192,7 @@ export function getPluginVariables(): PluginVariable[] {
         { name: "sleep", type: "function", desc: i18n.t("modelPlugin.variables.sleep") },
         { name: "signal", type: "AbortSignal", desc: i18n.t("modelPlugin.variables.signal") },
         { name: "onDelta", type: "function", desc: i18n.t("modelPlugin.variables.onDelta"), capabilities: ["text"] },
+        { name: "onProgress", type: "function", desc: i18n.t("modelPlugin.variables.onProgress"), capabilities: ["image", "video"] },
     ];
 }
 
