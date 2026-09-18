@@ -316,6 +316,8 @@ export type PluginRuntime = CanvasPluginApp & {
     React: typeof import("react");
     jsx: typeof import("react").createElement;
     Fragment: typeof import("react").Fragment;
+    // 传送到 document.body 的 portal(宿主 react-dom),让浮层逃出画布 transform、真正置顶
+    createPortal: (node: ReactNode, container: Element | DocumentFragment) => ReactNode;
 };
 
 // 插件包(默认导出对象,或返回它的工厂函数)

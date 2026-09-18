@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 
 import { emitCanvasEvent, onCanvasEvent } from "@/lib/canvas/canvas-event-bus";
 import type { CanvasPluginApp } from "@/types/canvas-plugin";
@@ -8,6 +9,8 @@ export type PluginRuntime = CanvasPluginApp & {
     React: typeof React;
     jsx: typeof React.createElement;
     Fragment: typeof React.Fragment;
+    // Portal to document.body so overlays escape canvas transforms and stay topmost.
+    createPortal: typeof createPortal;
     injectCSS: (css: string, key?: string) => () => void;
 };
 
@@ -31,6 +34,7 @@ export function getPluginRuntime(): PluginRuntime {
             React,
             jsx: React.createElement,
             Fragment: React.Fragment,
+            createPortal,
             injectCSS,
             version: typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev",
             emit: emitCanvasEvent,
