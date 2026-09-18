@@ -26,6 +26,25 @@ export const FACE_MAX = 3;
 export const OUTFIT_MAX = 2;
 export const EXTRA_MAX = 3;
 
+export type CharacterVersion = {
+    id: string;
+    image: string;
+    prompt: string;
+    createdAt: string;
+};
+
+function newVersionId(): string {
+    return `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+}
+
+// 当前展示图：选中版本 > 旧版 content（未迁移的老节点）
+function activeImage(m: CanvasNodeMetadata): string {
+    const versions = Array.isArray(m.versions) ? (m.versions as CharacterVersion[]) : [];
+    const active = versions.find((v) => v && v.id === m.activeVersionId) || versions[versions.length - 1];
+    if (active?.image) return active.image;
+    return typeof m.content === "string" ? m.content : "";
+}
+
 // 读图：新版数组 + 旧版单字段合并去重，保证老节点可用。
 function fieldImages(one: unknown, many: unknown, max: number): string[] {
     const list: string[] = [];
@@ -84,7 +103,8 @@ function readImageFile(file: File): Promise<string> {
 
 function CharacterContent({ ctx }: CanvasNodeContentProps) {
     const m = ctx.node.metadata || {};
-    const result = typeof m.content === "string" ? m.content : "";
+    const result = activeImage(m);
+    const versions = Array.isArray(m.versions) ? (m.versions as CharacterVersion[]) : [];
     const count = filledCount(m);
     return (
         <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", pointerEvents: "none", color: ctx.theme.node.text }}>
@@ -97,7 +117,7 @@ function CharacterContent({ ctx }: CanvasNodeContentProps) {
                 </div>
             )}
             <div style={{ padding: "6px 12px", fontSize: 12, color: ctx.theme.node.muted, borderTop: `1px solid ${ctx.theme.node.stroke}` }}>
-                {(m.name as string) || "未命名角色"} · 已填 {count}/9
+                {(m.name as string) || "未命名角色"} · 已填 {count}/9{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
             </div>
         </div>
     );
@@ -193,6 +213,29 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const input = { width: "100%", boxSizing: "border-box" as const, padding: "6px 10px", borderRadius: 8, border: `1px solid ${ctx.theme.node.stroke}`, background: "transparent", color: ctx.theme.node.text, fontSize: 13, outline: "none" };
     const lab = { fontSize: 13, fontWeight: 600, color: ctx.theme.node.text } as const;
     const btn = { padding: "6px 14px", borderRadius: 8, border: `1px solid ${ctx.theme.node.stroke}`, background: ctx.theme.toolbar.panel, color: ctx.theme.node.text, cursor: "pointer", fontSize: 13 } as const;
+    const versions = (Array.isArray(m.versions) ? (m.versions as CharacterVersion[]) : []).filter((v) => v && v.image);
+    const activeId = versions.some((v) => v.id === m.activeVersionId) ? (m.activeVersionId as string) : versions[versions.length - 1]?.id;
+
+    // 节点宽高自适应图片比例：宽固定 300，图高按比例换算后夹紧，+30 留给底部状态条。
+    const fitNode = async (url: string) => {
+        const d = await imageDims(url);
+        const imgH = Math.min(520, Math.max(200, Math.round((300 * d.h) / d.w)));
+        ctx.updateNode({ width: 300, height: imgH + 30 });
+    };
+
+    const switchVersion = async (id: string) => {
+        const v = versions.find((item) => item.id === id);
+        if (!v) return;
+        await fitNode(v.image);
+        set({ activeVersionId: id, content: v.image });
+    };
+
+    const deleteVersion = (id: string) => {
+        const rest = versions.filter((item) => item.id !== id);
+        const next = rest.some((item) => item.id === activeId) ? rest.find((item) => item.id === activeId) : rest[rest.length - 1];
+        set({ versions: rest, activeVersionId: next?.id, content: next?.image || "" });
+        if (next) void fitNode(next.image);
+    };
 
     const generate = async () => {
         setRunning(true);
@@ -204,11 +247,15 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
             const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9" });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
-            // 节点宽高自适应实际图片比例：宽固定 300，图高按比例换算后夹紧，+30 留给底部状态条。
-            const d = await imageDims(url);
-            const imgH = Math.min(520, Math.max(200, Math.round((300 * d.h) / d.w)));
-            ctx.updateNode({ width: 300, height: imgH + 30 });
-            set({ content: url, status: "success" });
+            await fitNode(url);
+            // 每次生成自动追加为新版本并选中；老节点首次生成时把旧图收为版本 1。
+            const nextVersions = [...versions];
+            if (!nextVersions.length && typeof m.content === "string" && m.content) {
+                nextVersions.push({ id: newVersionId(), image: m.content, prompt: "", createdAt: "" });
+            }
+            const ver: CharacterVersion = { id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() };
+            nextVersions.push(ver);
+            set({ versions: nextVersions, activeVersionId: ver.id, content: url, status: "success" });
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         } finally {
@@ -270,6 +317,33 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 <div style={{ fontSize: 12, color: ctx.theme.node.muted, marginBottom: 4 }}>提示词预览</div>
                 <div style={{ fontSize: 12, lineHeight: 1.6, padding: "8px 10px", borderRadius: 8, background: ctx.theme.node.fill, whiteSpace: "pre-wrap", maxHeight: 120, overflow: "auto" }}>{preview}</div>
             </div>
+            <FieldGroup title={`版本（${versions.length}）`} theme={ctx.theme}>
+                {versions.length ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {versions.map((v, i) => (
+                            <div key={v.id} style={{ position: "relative", width: 56, height: 56 }}>
+                                <img
+                                    src={v.image}
+                                    alt={`版本${i + 1}`}
+                                    title={v.prompt || `版本${i + 1}`}
+                                    onClick={() => switchVersion(v.id)}
+                                    style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, cursor: "pointer", border: v.id === activeId ? "2px solid #f472b6" : `1px solid ${ctx.theme.node.stroke}`, boxSizing: "border-box" }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => deleteVersion(v.id)}
+                                    title="删除该版本"
+                                    style={{ position: "absolute", right: -6, top: -6, width: 18, height: 18, borderRadius: 9, border: `1px solid ${ctx.theme.node.stroke}`, background: ctx.theme.toolbar.panel, color: ctx.theme.node.text, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: 0 }}
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>生成后自动保存版本，点击切换，× 删除</div>
+                )}
+            </FieldGroup>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...input, flex: 1, background: ctx.theme.toolbar.panel, fontWeight: 600 }}>
                     <option value="">{`默认模型（${ctx.ai.defaultModel("image")}）`}</option>
@@ -306,7 +380,7 @@ export default definePlugin({
             autoOpenPanel: true,
             hasTargetHandle: false, // 关闭上游传入：不接收其他节点的连线
             resource: (node) => {
-                const url = typeof node.metadata?.content === "string" ? node.metadata.content : "";
+                const url = activeImage(node.metadata || {});
                 return url ? { kind: "image", url } : null;
             },
             Content: CharacterContent,
