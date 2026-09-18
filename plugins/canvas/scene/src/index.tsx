@@ -1,6 +1,6 @@
 // 场景节点:点击左侧弹出表单 → 拼装提示词 → 参考图生成场景图。
 // 生成结果自动追加版本并写回本节点展示;下游输出当前选中版本图。
-import { definePlugin, getRuntime, useState } from "@infinite-canvas/plugin-sdk";
+import { definePlugin, getRuntime, useEffect, useRef, useState } from "@infinite-canvas/plugin-sdk";
 import type { CanvasNodeContentProps, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import type { ReactNode } from "react";
 
@@ -116,6 +116,26 @@ function SceneContent({ ctx }: CanvasNodeContentProps) {
     const result = activeImage(m);
     const previewOpen = Boolean(m.previewOpen) && result !== "";
     const closePreview = () => ctx.updateMetadata({ previewOpen: false });
+    const overlayRef = useRef<HTMLDivElement>(null);
+    // 预览打开时：在 document 捕获阶段拦截画布的手势事件（React 层 stopPropagation 拦不住原生监听），
+    // 浮层外的一切指针/滚轮事件到此为止，保证真正的模态；Esc 关闭。
+    useEffect(() => {
+        if (!previewOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") closePreview();
+        };
+        const block = (e: Event) => {
+            if (overlayRef.current && !overlayRef.current.contains(e.target as Node)) e.stopPropagation();
+        };
+        document.addEventListener("keydown", onKey, true);
+        document.addEventListener("pointerdown", block, true);
+        document.addEventListener("wheel", block, true);
+        return () => {
+            document.removeEventListener("keydown", onKey, true);
+            document.removeEventListener("pointerdown", block, true);
+            document.removeEventListener("wheel", block, true);
+        };
+    }, [previewOpen]);
     const versions = Array.isArray(m.versions) ? (m.versions as SceneVersion[]) : [];
     const count = filledCount(m);
     return (
@@ -134,12 +154,23 @@ function SceneContent({ ctx }: CanvasNodeContentProps) {
             {previewOpen &&
                 getRuntime().createPortal(
                     <div
+                        ref={overlayRef}
                         onClick={closePreview}
                         onMouseDown={(e) => e.stopPropagation()}
                         onWheel={(e) => e.stopPropagation()}
-                        style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "grid", placeItems: "center", pointerEvents: "auto" }}
+                        style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.7)", display: "grid", placeItems: "center", pointerEvents: "auto" }}
                     >
-                        <img src={result} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", objectFit: "contain", borderRadius: 12 }} />
+                        <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "92vw", maxHeight: "92vh" }}>
+                            <img src={result} alt="" style={{ display: "block", maxWidth: "92vw", maxHeight: "92vh", objectFit: "contain", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }} />
+                            <button
+                                type="button"
+                                onClick={closePreview}
+                                title="关闭"
+                                style={{ position: "absolute", right: -14, top: -14, width: 28, height: 28, borderRadius: 14, border: "none", background: ctx.theme.toolbar.panel, color: ctx.theme.node.text, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, boxShadow: "0 4px 16px rgba(0,0,0,0.5)" }}
+                            >
+                                ×
+                            </button>
+                        </div>
                     </div>,
                     document.body,
                 )}
