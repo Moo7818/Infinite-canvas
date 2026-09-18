@@ -33,6 +33,12 @@
 * 二次开发优先走插件 SDK：`infinite-canvas/plugins/canvas/sdk/src/define-plugin.ts:1`，节点类型注册见 `infinite-canvas/web/src/lib/canvas/node-registry.ts:1`。
 * 本地启动：`infinite-canvas/web` 下 `bun install && bun run dev`（`:3000`，见 `infinite-canvas/web/package.json:6`）。
 
+## Agent 团队（opencode）
+
+* 主智能体 `.opencode/agents/lead.md`（`mode: primary`，宪法 = 根 `AGENTS.md`，Tab 切换使用）。
+* Git 专员 `.opencode/agents/git-keeper.md`（`mode: subagent`，`@git-keeper` 直调或由 lead 指派）。
+* 调用规则见 lead 文件内「Subagents 调用规则」；新增成员时同步放行 `task` 白名单。
+
 ## 资产
 
 * `assets/grsai-autodl-canvas-config.json`：双渠道画布导入配置（Grsai + AutoDL），用法见文件内 `_note` 字段。
