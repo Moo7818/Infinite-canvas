@@ -11,45 +11,66 @@ export type CharacterFields = {
     name?: string;
     age?: number;
     faceText?: string;
-    faceImage?: string;
+    faceImage?: string; // 旧版单图，读取时并入 faceImages
+    faceImages?: string[]; // 最多 3
     outfitText?: string;
-    outfitImage?: string;
+    outfitImage?: string; // 旧版单图，读取时并入 outfitImages
+    outfitImages?: string[]; // 最多 2
     traits?: string;
     extraText?: string;
-    extraImage?: string;
+    extraImage?: string; // 旧版单图，读取时并入 extraImages
+    extraImages?: string[]; // 最多 3
 };
 
-// 按固定字段序收集参考图:容貌 → 服装 → 其他;n 为图在数组中的 1-based 位置。
+export const FACE_MAX = 3;
+export const OUTFIT_MAX = 2;
+export const EXTRA_MAX = 3;
+
+// 读图：新版数组 + 旧版单字段合并去重，保证老节点可用。
+function fieldImages(one: unknown, many: unknown, max: number): string[] {
+    const list: string[] = [];
+    if (Array.isArray(many)) list.push(...many.filter((v): v is string => typeof v === "string" && v.length > 0));
+    if (typeof one === "string" && one.length > 0 && !list.includes(one)) list.push(one);
+    return list.slice(0, max);
+}
+
+// 按固定字段序收集参考图:容貌(≤3) → 服装(≤2) → 其他(≤3);n 为图在数组中的 1-based 位置。
 export function buildCharacterPrompt(f: CharacterFields): { prompt: string; references: string[] } {
-    const references: string[] = [];
-    if (f.faceImage) references.push(f.faceImage);
-    if (f.outfitImage) references.push(f.outfitImage);
-    if (f.extraImage) references.push(f.extraImage);
-    const pos = (img?: string) => (img ? references.indexOf(img) + 1 : 0);
+    const face = fieldImages(f.faceImage, f.faceImages, FACE_MAX);
+    const outfit = fieldImages(f.outfitImage, f.outfitImages, OUTFIT_MAX);
+    const extra = fieldImages(f.extraImage, f.extraImages, EXTRA_MAX);
+    const references = [...face, ...outfit, ...extra];
+    const positions = (imgs: string[]) => imgs.map((img) => references.indexOf(img) + 1).join("、");
+    const mark = (label: string, imgs: string[]) => (imgs.length ? `（${label}参考图片${positions(imgs)}）` : "");
 
     const parts: string[] = [PROMPT_PREFIX];
     const head: string[] = [];
     if (f.name?.trim()) head.push(`角色名称：${f.name.trim()}`);
     if (f.age !== undefined && f.age !== null && String(f.age).trim() !== "") head.push(`${f.age}岁`);
     if (head.length) parts.push(`${head.join("，")}。`);
-    if (f.faceText?.trim() || f.faceImage) {
-        parts.push(`容貌：${f.faceText?.trim() || ""}${f.faceImage ? `（容貌参考图片${pos(f.faceImage)}）` : ""}。`);
+    if (f.faceText?.trim() || face.length) {
+        parts.push(`容貌：${f.faceText?.trim() || ""}${mark("容貌", face)}。`);
     }
-    if (f.outfitText?.trim() || f.outfitImage) {
-        parts.push(`服装：${f.outfitText?.trim() || ""}${f.outfitImage ? `（服装参考图片${pos(f.outfitImage)}）` : ""}。`);
+    if (f.outfitText?.trim() || outfit.length) {
+        parts.push(`服装：${f.outfitText?.trim() || ""}${mark("服装", outfit)}。`);
     }
     if (f.traits?.trim()) parts.push(`特征：${f.traits.trim()}。`);
-    if (f.extraText?.trim() || f.extraImage) {
-        parts.push(`其他：${f.extraText?.trim() || ""}${f.extraImage ? `（其他参考图片${pos(f.extraImage)}）` : ""}。`);
+    if (f.extraText?.trim() || extra.length) {
+        parts.push(`其他：${f.extraText?.trim() || ""}${mark("其他", extra)}。`);
     }
     return { prompt: parts.join(""), references };
 }
 
 function filledCount(m: CanvasNodeMetadata): number {
-    return ["name", "age", "faceText", "faceImage", "outfitText", "outfitImage", "traits", "extraText", "extraImage"].filter((k) => {
-        const v = (m as Record<string, unknown>)[k];
+    const r = m as Record<string, unknown>;
+    const hasImages = (one: unknown, many: unknown) => fieldImages(one, many, 99).length > 0;
+    const textKeys = ["name", "age", "faceText", "outfitText", "traits", "extraText"];
+    const textCount = textKeys.filter((k) => {
+        const v = r[k];
         return v !== undefined && v !== null && String(v).trim() !== "";
     }).length;
+    const imageCount = [hasImages(r.faceImage, r.faceImages), hasImages(r.outfitImage, r.outfitImages), hasImages(r.extraImage, r.extraImages)].filter(Boolean).length;
+    return textCount + imageCount;
 }
 
 function readImageFile(file: File): Promise<string> {
@@ -82,34 +103,43 @@ function CharacterContent({ ctx }: CanvasNodeContentProps) {
     );
 }
 
-function ImageField({ label, value, onPick, onClear, theme }: { label: string; value?: string; onPick: (dataUrl: string) => void; onClear: () => void; theme: CanvasNodeContentProps["ctx"]["theme"] }) {
+function ImagesField({ label, values, max, onChange, theme }: { label: string; values: string[]; max: number; onChange: (next: string[]) => void; theme: CanvasNodeContentProps["ctx"]["theme"] }) {
     return (
         <div>
-            <div style={{ fontSize: 12, color: theme.node.muted, marginBottom: 4 }}>{label}</div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {value ? (
-                    <img src={value} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8, border: `1px solid ${theme.node.stroke}` }} />
-                ) : (
-                    <div style={{ width: 48, height: 48, borderRadius: 8, border: `1px dashed ${theme.node.stroke}`, display: "grid", placeItems: "center", fontSize: 18, color: theme.node.placeholder }}>+</div>
-                )}
-                <label style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${theme.node.stroke}`, background: theme.toolbar.panel, color: theme.node.text, cursor: "pointer", fontSize: 12 }}>
-                    上传
-                    <input
-                        type="file"
-                        accept="image/*"
-                        hidden
-                        onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            e.target.value = "";
-                            if (!file) return;
-                            onPick(await readImageFile(file));
-                        }}
-                    />
-                </label>
-                {value && (
-                    <button type="button" onClick={onClear} style={{ padding: "4px 10px", borderRadius: 8, border: "none", background: "transparent", color: theme.node.muted, cursor: "pointer", fontSize: 12 }}>
-                        清除
-                    </button>
+            <div style={{ fontSize: 12, color: theme.node.muted, marginBottom: 4 }}>
+                {label}（{values.length}/{max}）
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {values.map((src, i) => (
+                    <div key={`${i}`} style={{ position: "relative", width: 48, height: 48 }}>
+                        <img src={src} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8, border: `1px solid ${theme.node.stroke}` }} />
+                        <button
+                            type="button"
+                            onClick={() => onChange(values.filter((_, j) => j !== i))}
+                            title="删除"
+                            style={{ position: "absolute", right: -6, top: -6, width: 18, height: 18, borderRadius: 9, border: `1px solid ${theme.node.stroke}`, background: theme.toolbar.panel, color: theme.node.text, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: 0 }}
+                        >
+                            ×
+                        </button>
+                    </div>
+                ))}
+                {values.length < max && (
+                    <label style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${theme.node.stroke}`, background: theme.toolbar.panel, color: theme.node.text, cursor: "pointer", fontSize: 12 }}>
+                        上传
+                        <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            hidden
+                            onChange={async (e) => {
+                                const files = Array.from(e.target.files || []);
+                                e.target.value = "";
+                                if (!files.length) return;
+                                const picked = await Promise.all(files.map((f) => readImageFile(f)));
+                                onChange([...values, ...picked].slice(0, max));
+                            }}
+                        />
+                    </label>
                 )}
             </div>
         </div>
@@ -220,21 +250,21 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     描述
                     <textarea value={(m.faceText as string) || ""} onChange={(e) => set({ faceText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
                 </label>
-                <ImageField label="参考图" value={m.faceImage as string} theme={ctx.theme} onPick={(v) => set({ faceImage: v })} onClear={() => set({ faceImage: undefined })} />
+                <ImagesField label="参考图" values={fieldImages(m.faceImage, m.faceImages, FACE_MAX)} max={FACE_MAX} theme={ctx.theme} onChange={(next) => set({ faceImages: next, faceImage: undefined })} />
             </FieldGroup>
             <FieldGroup title="服装" theme={ctx.theme}>
                 <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
                     描述
                     <textarea value={(m.outfitText as string) || ""} onChange={(e) => set({ outfitText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
                 </label>
-                <ImageField label="参考图" value={m.outfitImage as string} theme={ctx.theme} onPick={(v) => set({ outfitImage: v })} onClear={() => set({ outfitImage: undefined })} />
+                <ImagesField label="参考图" values={fieldImages(m.outfitImage, m.outfitImages, OUTFIT_MAX)} max={OUTFIT_MAX} theme={ctx.theme} onChange={(next) => set({ outfitImages: next, outfitImage: undefined })} />
             </FieldGroup>
             <FieldGroup title="其他" theme={ctx.theme}>
                 <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
                     描述
                     <textarea value={(m.extraText as string) || ""} onChange={(e) => set({ extraText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
                 </label>
-                <ImageField label="参考图" value={m.extraImage as string} theme={ctx.theme} onPick={(v) => set({ extraImage: v })} onClear={() => set({ extraImage: undefined })} />
+                <ImagesField label="参考图" values={fieldImages(m.extraImage, m.extraImages, EXTRA_MAX)} max={EXTRA_MAX} theme={ctx.theme} onChange={(next) => set({ extraImages: next, extraImage: undefined })} />
             </FieldGroup>
             <div>
                 <div style={{ fontSize: 12, color: ctx.theme.node.muted, marginBottom: 4 }}>提示词预览</div>
