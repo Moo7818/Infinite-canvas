@@ -102,6 +102,37 @@ function readImageFile(file: File): Promise<string> {
     });
 }
 
+// 参考图下采样：最长边压到 1024 并转 JPEG，避免 body 过大被上游拒收；远端 URL 原样透传。
+function downscaleImage(src: string, maxEdge = 1024): Promise<string> {
+    if (!src.startsWith("data:image/")) return Promise.resolve(src);
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+                if (scale >= 1) {
+                    resolve(src);
+                    return;
+                }
+                const c = document.createElement("canvas");
+                c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+                c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+                const g = c.getContext("2d");
+                if (!g) {
+                    resolve(src);
+                    return;
+                }
+                g.drawImage(img, 0, 0, c.width, c.height);
+                resolve(c.toDataURL("image/jpeg", 0.85));
+            } catch {
+                resolve(src);
+            }
+        };
+        img.onerror = () => resolve(src);
+        img.src = src;
+    });
+}
+
 function imageDims(src: string): Promise<{ w: number; h: number }> {
     return new Promise((resolve) => {
         const img = new Image();
@@ -132,6 +163,7 @@ function SceneContent({ ctx }: CanvasNodeContentProps) {
             )}
             <div style={{ padding: "6px 12px", fontSize: 12, color: ctx.theme.node.muted, borderTop: `1px solid ${ctx.theme.node.stroke}` }}>
                 {(m.name as string) || "未命名场景"} · 已填 {count}/11{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
+                {typeof m.generateError === "string" && m.generateError ? <span title={m.generateError} style={{ color: "#ef4444" }}> · 上次失败</span> : null}
             </div>
             {previewOpen && (
                 <div
@@ -309,6 +341,7 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
         return hit.length ? hit : allModels;
     })();
     const preview = buildScenePrompt(m as SceneFields).prompt;
+    const errMsg = error || (typeof m.generateError === "string" ? m.generateError : "");
     const canvasImages = ctx
         .getNodes()
         .filter((n) => n.id !== ctx.node.id)
@@ -358,12 +391,14 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
         runningControllers.set(ctx.node.id, controller);
         setRunning(true);
         setError("");
-        set({ generating: true });
+        set({ generating: true, generateError: undefined });
         try {
             const { prompt, references } = buildScenePrompt(m as SceneFields);
             const chosen = model || ctx.ai.defaultModel("image");
+            // 参考图先下采样再发送；顺序与数量不变，编号不受影响。
+            const refs = await Promise.all(references.map((u) => downscaleImage(u)));
             // 默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
-            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
+            const res = await ctx.ai.generateImage(prompt, { references: refs, model: chosen, size: "16:9", signal: controller.signal });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
             await fitNode(url);
@@ -374,14 +409,12 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
             }
             const ver: SceneVersion = { id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() };
             nextVersions.push(ver);
-            set({ versions: nextVersions, activeVersionId: ver.id, content: url, status: "success", generating: false });
+            set({ versions: nextVersions, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined });
         } catch (e) {
-            if (controller.signal.aborted) {
-                setError("已取消");
-            } else {
-                setError(e instanceof Error ? e.message : String(e));
-            }
-            set({ generating: false });
+            const msg = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
+            setError(msg);
+            // 错误持久化：面板关闭重开仍可见；节点卡片底部同步红标。
+            set({ generating: false, generateError: msg });
         } finally {
             runningControllers.delete(ctx.node.id);
             setRunning(false);
@@ -487,7 +520,7 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
                 )}
             </div>
             <div style={{ fontSize: 11, color: ctx.theme.node.muted }}>尺寸默认 16:9 · 画质跟随全局图片设置（建议 2K）</div>
-            {error && <div style={{ fontSize: 12, color: "#ef4444" }}>{error}</div>}
+            {errMsg && <div style={{ fontSize: 12, color: "#ef4444", whiteSpace: "pre-wrap" }}>{errMsg}</div>}
         </div>
     );
 }
