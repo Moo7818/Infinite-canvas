@@ -1,6 +1,6 @@
 // 角色节点:点击弹出表单 → 拼装提示词 → 参考图生成角色设定图。
 // 生成结果写回本节点展示;拼装文本经 resource 输出,可连给下游节点消费。
-import { definePlugin, useState } from "@infinite-canvas/plugin-sdk";
+import { definePlugin, getRuntime, useState } from "@infinite-canvas/plugin-sdk";
 import type { CanvasNodeContentProps, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import type { ReactNode } from "react";
 
@@ -125,26 +125,18 @@ function CharacterContent({ ctx }: CanvasNodeContentProps) {
             <div style={{ padding: "6px 12px", fontSize: 12, color: ctx.theme.node.muted, borderTop: `1px solid ${ctx.theme.node.stroke}` }}>
                 {(m.name as string) || "未命名角色"} · 已填 {count}/10{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
             </div>
-            {previewOpen && (
-                <div
-                    onClick={closePreview}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onWheel={(e) => e.stopPropagation()}
-                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.75)", display: "grid", placeItems: "center", pointerEvents: "auto", padding: "10vh 10vw", boxSizing: "border-box" }}
-                >
-                    <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "100%", maxHeight: "100%" }}>
-                        <img src={result} alt="" style={{ display: "block", maxWidth: "80vw", maxHeight: "80vh", objectFit: "contain", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }} />
-                        <button
-                            type="button"
-                            onClick={closePreview}
-                            title="关闭"
-                            style={{ position: "absolute", right: -14, top: -14, width: 28, height: 28, borderRadius: 14, border: "none", background: ctx.theme.toolbar.panel, color: ctx.theme.node.text, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, boxShadow: "0 4px 16px rgba(0,0,0,0.5)" }}
-                        >
-                            ×
-                        </button>
-                    </div>
-                </div>
-            )}
+            {previewOpen &&
+                getRuntime().createPortal(
+                    <div
+                        onClick={closePreview}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onWheel={(e) => e.stopPropagation()}
+                        style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "grid", placeItems: "center", pointerEvents: "auto" }}
+                    >
+                        <img src={result} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", objectFit: "contain", borderRadius: 12 }} />
+                    </div>,
+                    document.body,
+                )}
         </div>
     );
 }
