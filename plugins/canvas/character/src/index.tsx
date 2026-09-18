@@ -109,6 +109,7 @@ function CharacterContent({ ctx }: CanvasNodeContentProps) {
     const m = ctx.node.metadata || {};
     const result = activeImage(m);
     const previewOpen = Boolean(m.previewOpen) && result !== "";
+    const closePreview = () => ctx.updateMetadata({ previewOpen: false });
     const versions = Array.isArray(m.versions) ? (m.versions as CharacterVersion[]) : [];
     const count = filledCount(m);
     return (
@@ -126,15 +127,28 @@ function CharacterContent({ ctx }: CanvasNodeContentProps) {
             </div>
             {previewOpen && (
                 <div
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        ctx.updateMetadata({ previewOpen: false });
-                    }}
+                    onClick={closePreview}
                     onMouseDown={(e) => e.stopPropagation()}
                     onWheel={(e) => e.stopPropagation()}
-                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "grid", placeItems: "center", pointerEvents: "auto" }}
+                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.55)", display: "grid", placeItems: "center", pointerEvents: "auto", padding: 24, boxSizing: "border-box" }}
                 >
-                    <img src={result} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", objectFit: "contain", borderRadius: 12 }} />
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{ background: ctx.theme.node.panel, border: `1px solid ${ctx.theme.node.stroke}`, borderRadius: 14, maxWidth: "76vw", maxHeight: "86vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}
+                    >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: `1px solid ${ctx.theme.node.stroke}`, fontSize: 13, fontWeight: 600 }}>
+                            <span>{(m.name as string) || "角色预览"}</span>
+                            <button
+                                type="button"
+                                onClick={closePreview}
+                                style={{ width: 24, height: 24, borderRadius: 12, border: `1px solid ${ctx.theme.node.stroke}`, background: "transparent", color: ctx.theme.node.text, cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <img src={result} alt="" style={{ maxWidth: "76vw", maxHeight: "72vh", objectFit: "contain", background: "#000" }} />
+                    </div>
                 </div>
             )}
         </div>
