@@ -121,13 +121,20 @@ function CharacterContent({ ctx }: CanvasNodeContentProps) {
         const block = (e: Event) => {
             if (overlayRef.current && !overlayRef.current.contains(e.target as Node)) e.stopPropagation();
         };
+        // portal 在 React root 容器之外，合成事件收不到，关闭用原生 click（点图片本身不关）。
+        const onClick = (e: MouseEvent) => {
+            if ((e.target as HTMLElement | null)?.closest?.("img")) return;
+            closePreview();
+        };
         document.addEventListener("keydown", onKey, true);
         document.addEventListener("pointerdown", block, true);
         document.addEventListener("wheel", block, true);
+        overlayRef.current?.addEventListener("click", onClick);
         return () => {
             document.removeEventListener("keydown", onKey, true);
             document.removeEventListener("pointerdown", block, true);
             document.removeEventListener("wheel", block, true);
+            overlayRef.current?.removeEventListener("click", onClick);
         };
     }, [previewOpen]);
     const versions = Array.isArray(m.versions) ? (m.versions as CharacterVersion[]) : [];
@@ -456,7 +463,7 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
 export default definePlugin({
     id: "character",
     name: "角色节点",
-    version: "1.0.0",
+    version: "1.0.1",
     description: "填写角色表单，拼装提示词并用参考图生成角色设定图",
     nodes: [
         {
