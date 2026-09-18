@@ -10,13 +10,14 @@ export const PROMPT_PREFIX =
 export type CharacterFields = {
     name?: string;
     age?: number;
+    traits?: string;
+    style?: string;
     faceText?: string;
     faceImage?: string; // 旧版单图，读取时并入 faceImages
     faceImages?: string[]; // 最多 3
     outfitText?: string;
     outfitImage?: string; // 旧版单图，读取时并入 outfitImages
     outfitImages?: string[]; // 最多 2
-    traits?: string;
     extraText?: string;
     extraImage?: string; // 旧版单图，读取时并入 extraImages
     extraImages?: string[]; // 最多 3
@@ -25,6 +26,8 @@ export type CharacterFields = {
 export const FACE_MAX = 3;
 export const OUTFIT_MAX = 2;
 export const EXTRA_MAX = 3;
+export const STYLE_MAX_LEN = 20;
+export const STYLE_PRESETS = ["影视写实摄影", "3D皮克斯卡通", "吉普力动画", "中国风水墨动画"];
 
 export type CharacterVersion = {
     id: string;
@@ -74,6 +77,7 @@ export function buildCharacterPrompt(f: CharacterFields): { prompt: string; refe
         parts.push(`服装：${f.outfitText?.trim() || ""}${mark("服装", outfit)}。`);
     }
     if (f.traits?.trim()) parts.push(`特征：${f.traits.trim()}。`);
+    if (f.style?.trim()) parts.push(`风格：${f.style.trim()}。`);
     if (f.extraText?.trim() || extra.length) {
         parts.push(`其他：${f.extraText?.trim() || ""}${mark("其他", extra)}。`);
     }
@@ -83,7 +87,7 @@ export function buildCharacterPrompt(f: CharacterFields): { prompt: string; refe
 function filledCount(m: CanvasNodeMetadata): number {
     const r = m as Record<string, unknown>;
     const hasImages = (one: unknown, many: unknown) => fieldImages(one, many, 99).length > 0;
-    const textKeys = ["name", "age", "faceText", "outfitText", "traits", "extraText"];
+    const textKeys = ["name", "age", "faceText", "outfitText", "traits", "style", "extraText"];
     const textCount = textKeys.filter((k) => {
         const v = r[k];
         return v !== undefined && v !== null && String(v).trim() !== "";
@@ -117,7 +121,7 @@ function CharacterContent({ ctx }: CanvasNodeContentProps) {
                 </div>
             )}
             <div style={{ padding: "6px 12px", fontSize: 12, color: ctx.theme.node.muted, borderTop: `1px solid ${ctx.theme.node.stroke}` }}>
-                {(m.name as string) || "未命名角色"} · 已填 {count}/9{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
+                {(m.name as string) || "未命名角色"} · 已填 {count}/10{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
             </div>
         </div>
     );
@@ -290,6 +294,22 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 <label style={lab}>
                     特征
                     <input value={(m.traits as string) || ""} onChange={(e) => set({ traits: e.target.value })} placeholder="如：左眼下有泪痣" style={{ ...input, marginTop: 4, fontWeight: 400 }} />
+                </label>
+                <label style={lab}>
+                    风格
+                    <input
+                        value={(m.style as string) || ""}
+                        list="character-style-presets"
+                        maxLength={STYLE_MAX_LEN}
+                        onChange={(e) => set({ style: e.target.value })}
+                        placeholder="影视写实摄影、3D皮克斯卡通、吉普力动画、中国风水墨动画……"
+                        style={{ ...input, marginTop: 4, fontWeight: 400 }}
+                    />
+                    <datalist id="character-style-presets">
+                        {STYLE_PRESETS.map((s) => (
+                            <option key={s} value={s} />
+                        ))}
+                    </datalist>
                 </label>
             </FieldGroup>
             <FieldGroup title="容貌" theme={ctx.theme}>
