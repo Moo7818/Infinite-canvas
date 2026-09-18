@@ -1,7 +1,7 @@
 // 角色节点:点击弹出表单 → 拼装提示词 → 参考图生成角色设定图。
 // 生成结果写回本节点展示;拼装文本经 resource 输出,可连给下游节点消费。
 import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
-import type { CanvasNodeContentProps, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
+import type { CanvasNodeContentProps, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import type { ReactNode } from "react";
 
 export const PROMPT_PREFIX =
@@ -144,7 +144,17 @@ function CharacterContent({ ctx }: CanvasNodeContentProps) {
     );
 }
 
-function ImagesField({ label, values, max, onChange, theme }: { label: string; values: string[]; max: number; onChange: (next: string[]) => void; theme: CanvasNodeContentProps["ctx"]["theme"] }) {
+// 画布图片候选：内置图片节点与三自有节点都把图同步到 metadata.content，直接可读。
+// 快照式：选中时把 URL 拷入字段数组，与上传同流；远端 URL 跨域下不来时宿主侧会报错。
+function nodeImageUrl(n: CanvasNodeData): string | null {
+    const c = n.metadata?.content;
+    if (typeof c === "string" && (c.startsWith("data:image/") || /^https?:\/\//i.test(c))) return c;
+    return null;
+}
+
+function ImagesField({ label, values, max, onChange, candidates, theme }: { label: string; values: string[]; max: number; onChange: (next: string[]) => void; candidates: { id: string; title: string; url: string }[]; theme: CanvasNodeContentProps["ctx"]["theme"] }) {
+    const [picking, setPicking] = useState(false);
+    const fresh = candidates.filter((c) => !values.includes(c.url));
     return (
         <div>
             <div style={{ fontSize: 12, color: theme.node.muted, marginBottom: 4 }}>
@@ -165,24 +175,57 @@ function ImagesField({ label, values, max, onChange, theme }: { label: string; v
                     </div>
                 ))}
                 {values.length < max && (
-                    <label style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${theme.node.stroke}`, background: theme.toolbar.panel, color: theme.node.text, cursor: "pointer", fontSize: 12 }}>
-                        上传
-                        <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            hidden
-                            onChange={async (e) => {
-                                const files = Array.from(e.target.files || []);
-                                e.target.value = "";
-                                if (!files.length) return;
-                                const picked = await Promise.all(files.map((f) => readImageFile(f)));
-                                onChange([...values, ...picked].slice(0, max));
-                            }}
-                        />
-                    </label>
+                    <>
+                        <label style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${theme.node.stroke}`, background: theme.toolbar.panel, color: theme.node.text, cursor: "pointer", fontSize: 12 }}>
+                            上传
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                hidden
+                                onChange={async (e) => {
+                                    const files = Array.from(e.target.files || []);
+                                    e.target.value = "";
+                                    if (!files.length) return;
+                                    const picked = await Promise.all(files.map((f) => readImageFile(f)));
+                                    onChange([...values, ...picked].slice(0, max));
+                                }}
+                            />
+                        </label>
+                        {candidates.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setPicking((v) => !v)}
+                                style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${theme.node.stroke}`, background: picking ? theme.node.fill : theme.toolbar.panel, color: theme.node.text, cursor: "pointer", fontSize: 12 }}
+                            >
+                                画布选择
+                            </button>
+                        )}
+                    </>
                 )}
             </div>
+            {picking && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", maxHeight: 132, overflow: "auto", marginTop: 8, padding: 8, borderRadius: 8, background: theme.node.fill }}>
+                    {fresh.length ? (
+                        fresh.map((c) => (
+                            <img
+                                key={c.id}
+                                src={c.url}
+                                alt={c.title}
+                                title={`引用：${c.title}`}
+                                onClick={() => {
+                                    const next = [...values, c.url].slice(0, max);
+                                    onChange(next);
+                                    if (next.length >= max) setPicking(false);
+                                }}
+                                style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8, cursor: "pointer", border: `1px solid ${theme.node.stroke}` }}
+                            />
+                        ))
+                    ) : (
+                        <div style={{ fontSize: 12, color: theme.node.muted }}>画布上暂无更多可用图片</div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -241,6 +284,11 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
         return hit.length ? hit : allModels;
     })();
     const preview = buildCharacterPrompt(m as CharacterFields).prompt;
+    const canvasImages = ctx
+        .getNodes()
+        .filter((n) => n.id !== ctx.node.id)
+        .map((n) => ({ id: n.id, title: n.title, url: nodeImageUrl(n) }))
+        .filter((c): c is { id: string; title: string; url: string } => c.url !== null);
 
     const set = (patch: CanvasNodeMetadata) => ctx.updateMetadata(patch);
     const setName = (name: string) => {
@@ -381,21 +429,21 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     描述
                     <textarea value={(m.faceText as string) || ""} onChange={(e) => set({ faceText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
                 </label>
-                <ImagesField label="参考图" values={fieldImages(m.faceImage, m.faceImages, FACE_MAX)} max={FACE_MAX} theme={ctx.theme} onChange={(next) => set({ faceImages: next, faceImage: undefined })} />
+                <ImagesField label="参考图" values={fieldImages(m.faceImage, m.faceImages, FACE_MAX)} max={FACE_MAX} candidates={canvasImages} theme={ctx.theme} onChange={(next) => set({ faceImages: next, faceImage: undefined })} />
             </FieldGroup>
             <FieldGroup title="服装" theme={ctx.theme}>
                 <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
                     描述
                     <textarea value={(m.outfitText as string) || ""} onChange={(e) => set({ outfitText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
                 </label>
-                <ImagesField label="参考图" values={fieldImages(m.outfitImage, m.outfitImages, OUTFIT_MAX)} max={OUTFIT_MAX} theme={ctx.theme} onChange={(next) => set({ outfitImages: next, outfitImage: undefined })} />
+                <ImagesField label="参考图" values={fieldImages(m.outfitImage, m.outfitImages, OUTFIT_MAX)} max={OUTFIT_MAX} candidates={canvasImages} theme={ctx.theme} onChange={(next) => set({ outfitImages: next, outfitImage: undefined })} />
             </FieldGroup>
             <FieldGroup title="其他" theme={ctx.theme}>
                 <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
                     描述
                     <textarea value={(m.extraText as string) || ""} onChange={(e) => set({ extraText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
                 </label>
-                <ImagesField label="参考图" values={fieldImages(m.extraImage, m.extraImages, EXTRA_MAX)} max={EXTRA_MAX} theme={ctx.theme} onChange={(next) => set({ extraImages: next, extraImage: undefined })} />
+                <ImagesField label="参考图" values={fieldImages(m.extraImage, m.extraImages, EXTRA_MAX)} max={EXTRA_MAX} candidates={canvasImages} theme={ctx.theme} onChange={(next) => set({ extraImages: next, extraImage: undefined })} />
             </FieldGroup>
             <div>
                 <div style={{ fontSize: 12, color: ctx.theme.node.muted, marginBottom: 4 }}>提示词预览</div>
