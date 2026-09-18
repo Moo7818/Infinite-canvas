@@ -1,6 +1,6 @@
 // 道具节点:点击左侧弹出表单 → 拼装提示词 → 参考图生成道具图。
 // 生成结果自动追加版本并写回本节点展示;下游输出当前选中版本图。
-import { definePlugin, useState } from "@infinite-canvas/plugin-sdk";
+import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
 import type { CanvasNodeContentProps, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import type { ReactNode } from "react";
 
@@ -109,6 +109,9 @@ function imageDims(src: string): Promise<{ w: number; h: number }> {
         img.src = src;
     });
 }
+
+// 在途生成的取消器：模块常驻，面板开关不影响；刷新后 Map 为空，靠 generating 残留自愈。
+const runningControllers = new Map<string, AbortController>();
 
 function PropContent({ ctx }: CanvasNodeContentProps) {
     const m = ctx.node.metadata || {};
@@ -232,7 +235,16 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const m = ctx.node.metadata || {};
     // 模型选择持久化到 metadata，面板关闭重开不丢失。
     const [model, setModel] = useState(typeof m.model === "string" ? m.model : "");
-    const [running, setRunning] = useState(false);
+    // 生成态持久化：generating 进 metadata，关面板重开不丢失；在途请求靠模块级取消器接管。
+    const [running, setRunning] = useState(Boolean((ctx.node.metadata || {}).generating));
+    useEffect(() => {
+        // 兜底：generating 为真但本会话无在途请求（刷新/崩溃残留），清掉避免永久 disabled。
+        if ((ctx.node.metadata || {}).generating && !runningControllers.has(ctx.node.id)) {
+            ctx.updateMetadata({ generating: false });
+            setRunning(false);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const [error, setError] = useState("");
     // 模型下拉只保留 nano-2 / nano-pro / image 系列；无命中时回退全量，避免空下拉卡死。
     const MODEL_ALLOW = ["nano-2", "nano-pro", "image"];
@@ -284,14 +296,21 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
         if (next) void fitNode(next.image);
     };
 
+    const cancel = () => runningControllers.get(ctx.node.id)?.abort();
+
     const generate = async () => {
+        // 防重复提交：内存态 + 持久态双保险
+        if (running || Boolean((ctx.node.metadata || {}).generating)) return;
+        const controller = new AbortController();
+        runningControllers.set(ctx.node.id, controller);
         setRunning(true);
         setError("");
+        set({ generating: true });
         try {
             const { prompt, references } = buildPropPrompt(m as PropFields);
             const chosen = model || ctx.ai.defaultModel("image");
             // 默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
-            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9" });
+            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
             await fitNode(url);
@@ -302,10 +321,16 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
             }
             const ver: PropVersion = { id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() };
             nextVersions.push(ver);
-            set({ versions: nextVersions, activeVersionId: ver.id, content: url, status: "success" });
+            set({ versions: nextVersions, activeVersionId: ver.id, content: url, status: "success", generating: false });
         } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
+            if (controller.signal.aborted) {
+                setError("已取消");
+            } else {
+                setError(e instanceof Error ? e.message : String(e));
+            }
+            set({ generating: false });
         } finally {
+            runningControllers.delete(ctx.node.id);
             setRunning(false);
         }
     };
@@ -398,9 +423,15 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
                         </option>
                     ))}
                 </select>
-                <button type="button" onClick={generate} disabled={running} style={{ ...btn, opacity: running ? 0.6 : 1 }}>
-                    {running ? "生成中…" : "生成道具图"}
-                </button>
+                {running ? (
+                    <button type="button" onClick={cancel} style={btn}>
+                        取消
+                    </button>
+                ) : (
+                    <button type="button" onClick={generate} style={btn}>
+                        生成道具图
+                    </button>
+                )}
             </div>
             <div style={{ fontSize: 11, color: ctx.theme.node.muted }}>尺寸默认 16:9 · 画质跟随全局图片设置（建议 2K）</div>
             {error && <div style={{ fontSize: 12, color: "#ef4444" }}>{error}</div>}
