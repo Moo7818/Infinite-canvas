@@ -1,3 +1,3 @@
 import { buildPlugin } from "@infinite-canvas/plugin-sdk/build";
 
-await buildPlugin(import.meta.url);
+await buildPlugin(import.meta.url, { esbuild: { keepNames: true } });
