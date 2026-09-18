@@ -105,37 +105,6 @@ function readImageFile(file: File): Promise<string> {
     });
 }
 
-// 参考图下采样：最长边压到 1024 并转 JPEG，避免 body 过大被上游拒收；远端 URL 原样透传。
-function downscaleImage(src: string, maxEdge = 1024): Promise<string> {
-    if (!src.startsWith("data:image/")) return Promise.resolve(src);
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-            try {
-                const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
-                if (scale >= 1) {
-                    resolve(src);
-                    return;
-                }
-                const c = document.createElement("canvas");
-                c.width = Math.max(1, Math.round(img.naturalWidth * scale));
-                c.height = Math.max(1, Math.round(img.naturalHeight * scale));
-                const g = c.getContext("2d");
-                if (!g) {
-                    resolve(src);
-                    return;
-                }
-                g.drawImage(img, 0, 0, c.width, c.height);
-                resolve(c.toDataURL("image/jpeg", 0.85));
-            } catch {
-                resolve(src);
-            }
-        };
-        img.onerror = () => resolve(src);
-        img.src = src;
-    });
-}
-
 // 在途生成的取消器：模块常驻，面板开关不影响；刷新后 Map 为空，靠 generating 残留自愈。
 const runningControllers = new Map<string, AbortController>();
 
@@ -370,10 +339,8 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
         try {
             const { prompt, references } = buildCharacterPrompt(m as CharacterFields);
             const chosen = model || ctx.ai.defaultModel("image");
-            // 参考图先下采样再发送；顺序与数量不变，编号不受影响。
-            const refs = await Promise.all(references.map((u) => downscaleImage(u)));
             // 默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
-            const res = await ctx.ai.generateImage(prompt, { references: refs, model: chosen, size: "16:9", signal: controller.signal });
+            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
             await fitNode(url);
