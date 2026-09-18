@@ -436,17 +436,11 @@ export default definePlugin({
             },
             Content: SceneContent,
             Panel: ScenePanel,
-            toolbar: (ctx) => [
-                {
-                    id: "zoom",
-                    title: "放大预览",
-                    label: "放大",
-                    icon: "🔍",
-                    onClick: () => {
-                        if (activeImage(ctx.node.metadata || {})) ctx.updateMetadata({ previewOpen: true });
-                    },
-                },
-            ],
+            onDoubleClick: (ctx) => {
+                if (!activeImage(ctx.node.metadata || {})) return false;
+                ctx.updateMetadata({ previewOpen: true });
+                return true;
+            },
         },
     ],
 });
