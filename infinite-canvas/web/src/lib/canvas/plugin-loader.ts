@@ -29,8 +29,10 @@ function assertPlugin(plugin: unknown): asserts plugin is CanvasPlugin {
 }
 
 export function activatePlugin(plugin: CanvasPlugin) {
-    registerNodeDefinitions(plugin.nodes, plugin.id);
+    // Runtime first: registering definitions bumps the registry version, which synchronously
+    // re-renders already-mounted nodes; the global runtime must exist before any of them render.
     const runtime = getPluginRuntime();
+    registerNodeDefinitions(plugin.nodes, plugin.id);
     const disposers: Array<() => void> = [];
     // Inject declared styles when enabled and remove them when disabled or uninstalled.
     if (plugin.css) disposers.push(runtime.injectCSS(plugin.css, plugin.id));
