@@ -23,7 +23,7 @@
 | 分支策略 | `docs/git-branch-strategy.md:1` |
 | 架构/技术栈/产品/路线 | `docs/architecture.md:1`, `docs/tech-stack.md:1`, `docs/product-design.md:1`, `docs/roadmap.md:1` |
 | 插件开发指南 | `docs/plugin-dev-guide.md:1` |
-| Agent 团队 | `.opencode/agents/lead.md:1`（主智能体，宪法即本文），`.opencode/agents/git-keeper.md:1` |
+| Agent 团队 | `.opencode/agents/lead.md:1`（主智能体，宪法即本文），`.opencode/agents/git-keeper.md:1`，`.opencode/agents/plugin-dev.md:1` |
 | 上游功能/部署指路 | `docs/upstream-summary.md:1`（只索引，不复制原文） |
 | 文档总览索引 | `docs/index.md:1`（唯一不沉底的全量索引） |
 
