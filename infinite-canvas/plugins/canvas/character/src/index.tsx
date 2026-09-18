@@ -2,6 +2,7 @@
 // 生成结果写回本节点展示;拼装文本经 resource 输出,可连给下游节点消费。
 import { definePlugin, useState } from "@infinite-canvas/plugin-sdk";
 import type { CanvasNodeContentProps, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
+import type { ReactNode } from "react";
 
 export const PROMPT_PREFIX =
     "左侧为角色半身近景，右侧为人物全身三视图（正面、侧边、背面，正面视图不显示头部区域），纯白色背景，光线柔和均匀，1/4黑柔滤镜、电影质感摄影实拍。";
@@ -115,12 +116,30 @@ function ImageField({ label, value, onPick, onClear, theme }: { label: string; v
     );
 }
 
+function FieldGroup({ title, children, theme }: { title: string; children: ReactNode; theme: CanvasNodeContentProps["ctx"]["theme"] }) {
+    return (
+        <div style={{ border: `1px solid ${theme.node.stroke}`, borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: theme.node.text }}>{title}</div>
+            {children}
+        </div>
+    );
+}
+
 function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const m = ctx.node.metadata || {};
     const [model, setModel] = useState("");
     const [running, setRunning] = useState(false);
     const [error, setError] = useState("");
-    const models = ctx.ai.listModels("image");
+    // 模型下拉只保留 nano-2 / nano-pro / image 系列；无命中时回退全量，避免空下拉卡死。
+    const MODEL_ALLOW = ["nano-2", "nano-pro", "image"];
+    const allModels = ctx.ai.listModels("image");
+    const models = (() => {
+        const hit = allModels.filter((o) => {
+            const hay = `${o.value} ${o.label}`.toLowerCase();
+            return MODEL_ALLOW.some((k) => hay.includes(k));
+        });
+        return hit.length ? hit : allModels;
+    })();
     const preview = buildCharacterPrompt(m as CharacterFields).prompt;
 
     const set = (patch: CanvasNodeMetadata) => ctx.updateMetadata(patch);
@@ -138,7 +157,8 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
         try {
             const { prompt, references } = buildCharacterPrompt(m as CharacterFields);
             const chosen = model || ctx.ai.defaultModel("image");
-            const res = await ctx.ai.generateImage(prompt, { references, model: chosen });
+            // 默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
+            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9" });
             if (!res.images.length) throw new Error("生成未返回图片");
             set({ content: res.images[0], status: "success" });
         } catch (e) {
@@ -149,7 +169,7 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
     };
 
     return (
-        <div data-canvas-no-zoom onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 10, padding: 14, color: ctx.theme.node.text }}>
+        <div data-canvas-no-zoom onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 10, padding: 14, color: ctx.theme.node.text, background: ctx.theme.node.panel, borderRadius: 12, border: `1px solid ${ctx.theme.node.stroke}` }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 14, fontWeight: 600 }}>👤 角色设定</span>
                 <button type="button" onClick={onClose} style={{ ...btn, padding: "4px 10px", fontSize: 12 }}>
@@ -171,25 +191,31 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     style={{ ...input, marginTop: 4 }}
                 />
             </label>
-            <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
-                容貌描述
-                <textarea value={(m.faceText as string) || ""} onChange={(e) => set({ faceText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
-            </label>
-            <ImageField label="容貌参考图" value={m.faceImage as string} theme={ctx.theme} onPick={(v) => set({ faceImage: v })} onClear={() => set({ faceImage: undefined })} />
-            <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
-                服装描述
-                <textarea value={(m.outfitText as string) || ""} onChange={(e) => set({ outfitText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
-            </label>
-            <ImageField label="服装参考图" value={m.outfitImage as string} theme={ctx.theme} onPick={(v) => set({ outfitImage: v })} onClear={() => set({ outfitImage: undefined })} />
+            <FieldGroup title="容貌" theme={ctx.theme}>
+                <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
+                    描述
+                    <textarea value={(m.faceText as string) || ""} onChange={(e) => set({ faceText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
+                </label>
+                <ImageField label="参考图" value={m.faceImage as string} theme={ctx.theme} onPick={(v) => set({ faceImage: v })} onClear={() => set({ faceImage: undefined })} />
+            </FieldGroup>
+            <FieldGroup title="服装" theme={ctx.theme}>
+                <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
+                    描述
+                    <textarea value={(m.outfitText as string) || ""} onChange={(e) => set({ outfitText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
+                </label>
+                <ImageField label="参考图" value={m.outfitImage as string} theme={ctx.theme} onPick={(v) => set({ outfitImage: v })} onClear={() => set({ outfitImage: undefined })} />
+            </FieldGroup>
             <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
                 特征
                 <input value={(m.traits as string) || ""} onChange={(e) => set({ traits: e.target.value })} placeholder="如：左眼下有泪痣" style={{ ...input, marginTop: 4 }} />
             </label>
-            <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
-                其他描述
-                <textarea value={(m.extraText as string) || ""} onChange={(e) => set({ extraText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
-            </label>
-            <ImageField label="其他参考图" value={m.extraImage as string} theme={ctx.theme} onPick={(v) => set({ extraImage: v })} onClear={() => set({ extraImage: undefined })} />
+            <FieldGroup title="其他" theme={ctx.theme}>
+                <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
+                    描述
+                    <textarea value={(m.extraText as string) || ""} onChange={(e) => set({ extraText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
+                </label>
+                <ImageField label="参考图" value={m.extraImage as string} theme={ctx.theme} onPick={(v) => set({ extraImage: v })} onClear={() => set({ extraImage: undefined })} />
+            </FieldGroup>
             <div>
                 <div style={{ fontSize: 12, color: ctx.theme.node.muted, marginBottom: 4 }}>提示词预览</div>
                 <div style={{ fontSize: 12, lineHeight: 1.6, padding: "8px 10px", borderRadius: 8, background: ctx.theme.node.fill, whiteSpace: "pre-wrap", maxHeight: 120, overflow: "auto" }}>{preview}</div>
@@ -207,6 +233,7 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     {running ? "生成中…" : "生成角色图"}
                 </button>
             </div>
+            <div style={{ fontSize: 11, color: ctx.theme.node.muted }}>尺寸默认 16:9 · 画质跟随全局图片设置（建议 2K）</div>
             {error && <div style={{ fontSize: 12, color: "#ef4444" }}>{error}</div>}
         </div>
     );
