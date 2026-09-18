@@ -194,21 +194,27 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     关闭
                 </button>
             </div>
-            <label style={lab}>
-                名称
-                <input value={(m.name as string) || ""} onChange={(e) => setName(e.target.value)} placeholder="角色名称，也是节点名称" style={{ ...input, marginTop: 4, fontWeight: 400 }} />
-            </label>
-            <label style={lab}>
-                年龄
-                <input
-                    type="number"
-                    min={0}
-                    value={m.age === undefined || m.age === null ? "" : String(m.age)}
-                    onChange={(e) => set({ age: e.target.value === "" ? undefined : Number(e.target.value) })}
-                    placeholder="岁"
-                    style={{ ...input, marginTop: 4 }}
-                />
-            </label>
+            <FieldGroup title="基础" theme={ctx.theme}>
+                <label style={lab}>
+                    名称
+                    <input value={(m.name as string) || ""} onChange={(e) => setName(e.target.value)} placeholder="角色名称，也是节点名称" style={{ ...input, marginTop: 4, fontWeight: 400 }} />
+                </label>
+                <label style={lab}>
+                    年龄
+                    <input
+                        type="number"
+                        min={0}
+                        value={m.age === undefined || m.age === null ? "" : String(m.age)}
+                        onChange={(e) => set({ age: e.target.value === "" ? undefined : Number(e.target.value) })}
+                        placeholder="岁"
+                        style={{ ...input, marginTop: 4, fontWeight: 400 }}
+                    />
+                </label>
+                <label style={lab}>
+                    特征
+                    <input value={(m.traits as string) || ""} onChange={(e) => set({ traits: e.target.value })} placeholder="如：左眼下有泪痣" style={{ ...input, marginTop: 4, fontWeight: 400 }} />
+                </label>
+            </FieldGroup>
             <FieldGroup title="容貌" theme={ctx.theme}>
                 <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
                     描述
@@ -223,10 +229,6 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 </label>
                 <ImageField label="参考图" value={m.outfitImage as string} theme={ctx.theme} onPick={(v) => set({ outfitImage: v })} onClear={() => set({ outfitImage: undefined })} />
             </FieldGroup>
-            <label style={lab}>
-                特征
-                <input value={(m.traits as string) || ""} onChange={(e) => set({ traits: e.target.value })} placeholder="如：左眼下有泪痣" style={{ ...input, marginTop: 4, fontWeight: 400 }} />
-            </label>
             <FieldGroup title="其他" theme={ctx.theme}>
                 <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
                     描述
@@ -272,9 +274,10 @@ export default definePlugin({
             defaultMetadata: {},
             minimapColor: "#f472b6",
             autoOpenPanel: true,
+            hasTargetHandle: false, // 关闭上游传入：不接收其他节点的连线
             resource: (node) => {
-                const { prompt } = buildCharacterPrompt((node.metadata || {}) as CharacterFields);
-                return prompt === PROMPT_PREFIX ? null : { kind: "text", text: prompt };
+                const url = typeof node.metadata?.content === "string" ? node.metadata.content : "";
+                return url ? { kind: "image", url } : null;
             },
             Content: CharacterContent,
             Panel: CharacterPanel,

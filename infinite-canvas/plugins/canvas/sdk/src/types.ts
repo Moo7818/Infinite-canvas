@@ -274,6 +274,7 @@ export type CanvasNodeDefinition = {
     minimapColor?: string;
     showInCreateMenu?: boolean; // 默认 true
     hasSourceHandle?: boolean; // 右侧输出连接点,默认 true
+    hasTargetHandle?: boolean; // 左侧输入连接点,默认 true
     hidePanel?: boolean; // 为 true 时:点击/新建不弹出下方面板(含内置生图面板),纯展示型节点用
     // 为 true 时:节点卡片背景与边框透明,内容直接融入画布(如 SVG/矢量图);选中时仍显示选中描边
     transparentBackground?: boolean;

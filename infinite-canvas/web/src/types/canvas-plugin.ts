@@ -108,6 +108,7 @@ export type CanvasNodeDefinition = {
     minimapColor?: string;
     showInCreateMenu?: boolean; // Defaults to true.
     hasSourceHandle?: boolean; // Right-side output handle; defaults to true.
+    hasTargetHandle?: boolean; // Left-side input handle; defaults to true.
     hidePanel?: boolean; // Prevents click/create from opening a lower panel; intended for display-only nodes.
     transparentBackground?: boolean; // Makes the node card transparent so SVG or vector content blends into the canvas.
     autoOpenPanel?: boolean; // Opens a custom Panel on click; automatic opening otherwise applies only to built-ins.
