@@ -196,6 +196,9 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const [model, setModel] = useState("");
     const [running, setRunning] = useState(false);
     const [error, setError] = useState("");
+    const [styleCustom, setStyleCustom] = useState(false);
+    const styleVal = (m.style as string) || "";
+    const showCustomStyle = styleCustom || (styleVal !== "" && !STYLE_PRESETS.includes(styleVal));
     // 模型下拉只保留 nano-2 / nano-pro / image 系列；无命中时回退全量，避免空下拉卡死。
     const MODEL_ALLOW = ["nano-2", "nano-pro", "image"];
     const allModels = ctx.ai.listModels("image");
@@ -215,6 +218,7 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
     };
 
     const input = { width: "100%", boxSizing: "border-box" as const, padding: "6px 10px", borderRadius: 8, border: `1px solid ${ctx.theme.node.stroke}`, background: "transparent", color: ctx.theme.node.text, fontSize: 13, outline: "none" };
+    const select = { ...input, background: ctx.theme.toolbar.panel, fontWeight: 600 } as const;
     const lab = { fontSize: 13, fontWeight: 600, color: ctx.theme.node.text } as const;
     const btn = { padding: "6px 14px", borderRadius: 8, border: `1px solid ${ctx.theme.node.stroke}`, background: ctx.theme.toolbar.panel, color: ctx.theme.node.text, cursor: "pointer", fontSize: 13 } as const;
     const versions = (Array.isArray(m.versions) ? (m.versions as CharacterVersion[]) : []).filter((v) => v && v.image);
@@ -297,19 +301,35 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 </label>
                 <label style={lab}>
                     风格
-                    <input
-                        value={(m.style as string) || ""}
-                        list="character-style-presets"
-                        maxLength={STYLE_MAX_LEN}
-                        onChange={(e) => set({ style: e.target.value })}
-                        placeholder="影视写实摄影、3D皮克斯卡通、吉普力动画、中国风水墨动画……"
-                        style={{ ...input, marginTop: 4, fontWeight: 400 }}
-                    />
-                    <datalist id="character-style-presets">
+                    <select
+                        value={showCustomStyle ? "__custom" : styleVal}
+                        onChange={(e) => {
+                            if (e.target.value === "__custom") {
+                                setStyleCustom(true);
+                            } else {
+                                setStyleCustom(false);
+                                set({ style: e.target.value || undefined });
+                            }
+                        }}
+                        style={{ ...select, marginTop: 4 }}
+                    >
+                        <option value="">未选择</option>
                         {STYLE_PRESETS.map((s) => (
-                            <option key={s} value={s} />
+                            <option key={s} value={s}>
+                                {s}
+                            </option>
                         ))}
-                    </datalist>
+                        <option value="__custom">自定义…</option>
+                    </select>
+                    {showCustomStyle && (
+                        <input
+                            value={STYLE_PRESETS.includes(styleVal) ? "" : styleVal}
+                            maxLength={STYLE_MAX_LEN}
+                            onChange={(e) => set({ style: e.target.value || undefined })}
+                            placeholder="自定义风格，最多20字"
+                            style={{ ...input, marginTop: 6, fontWeight: 400 }}
+                        />
+                    )}
                 </label>
             </FieldGroup>
             <FieldGroup title="容貌" theme={ctx.theme}>
@@ -365,7 +385,7 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 )}
             </FieldGroup>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...input, flex: 1, background: ctx.theme.toolbar.panel, fontWeight: 600 }}>
+                <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...select, flex: 1 }}>
                     <option value="">{`默认模型（${ctx.ai.defaultModel("image")}）`}</option>
                     {models.map((o) => (
                         <option key={o.value} value={o.value}>
