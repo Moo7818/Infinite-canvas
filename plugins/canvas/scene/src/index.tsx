@@ -114,6 +114,7 @@ function imageDims(src: string): Promise<{ w: number; h: number }> {
 function SceneContent({ ctx }: CanvasNodeContentProps) {
     const m = ctx.node.metadata || {};
     const result = activeImage(m);
+    const previewOpen = Boolean(m.previewOpen) && result !== "";
     const versions = Array.isArray(m.versions) ? (m.versions as SceneVersion[]) : [];
     const count = filledCount(m);
     return (
@@ -129,6 +130,19 @@ function SceneContent({ ctx }: CanvasNodeContentProps) {
             <div style={{ padding: "6px 12px", fontSize: 12, color: ctx.theme.node.muted, borderTop: `1px solid ${ctx.theme.node.stroke}` }}>
                 {(m.name as string) || "未命名场景"} · 已填 {count}/11{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
             </div>
+            {previewOpen && (
+                <div
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        ctx.updateMetadata({ previewOpen: false });
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onWheel={(e) => e.stopPropagation()}
+                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.85)", display: "grid", placeItems: "center", pointerEvents: "auto" }}
+                >
+                    <img src={result} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", objectFit: "contain", borderRadius: 12 }} />
+                </div>
+            )}
         </div>
     );
 }
@@ -221,7 +235,12 @@ function PresetSelect({ value, presets, placeholder, onChange, style }: { value:
 
 function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
     const m = ctx.node.metadata || {};
-    const [model, setModel] = useState("");
+    const [model, setModel] = useState(typeof m.model === "string" ? m.model : "");
+    // 模型选择持久化到 metadata，面板关闭重开不丢失。
+    const pickModel = (v: string) => {
+        setModel(v);
+        set({ model: v || undefined });
+    };
     const [running, setRunning] = useState(false);
     const [error, setError] = useState("");
     // 模型下拉只保留 nano-2 / nano-pro / image 系列；无命中时回退全量，避免空下拉卡死。
@@ -376,7 +395,7 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
                 )}
             </FieldGroup>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...select, flex: 1 }}>
+                <select value={model} onChange={(e) => pickModel(e.target.value)} style={{ ...select, flex: 1 }}>
                     <option value="">{`默认模型（${ctx.ai.defaultModel("image")}）`}</option>
                     {models.map((o) => (
                         <option key={o.value} value={o.value}>
@@ -417,6 +436,17 @@ export default definePlugin({
             },
             Content: SceneContent,
             Panel: ScenePanel,
+            toolbar: (ctx) => [
+                {
+                    id: "zoom",
+                    title: "放大预览",
+                    label: "放大",
+                    icon: "🔍",
+                    onClick: () => {
+                        if (activeImage(ctx.node.metadata || {})) ctx.updateMetadata({ previewOpen: true });
+                    },
+                },
+            ],
         },
     ],
 });
