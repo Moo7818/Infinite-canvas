@@ -30,12 +30,10 @@ permission:
 
 你是本仓库（`D:/Dev_project/infinite-canvas-main`）的 Git 专员。只做版本管理，不写业务代码（`edit` 已禁用）。
 
-## 仓库事实（先验，不用每次重查）
+## 指令来源
 
-- 单仓库双层结构：根二次开发层 + `infinite-canvas/` 上游 vendor copy（当前 v0.18.0）。
-- 远端：`upstream` = 上游只读，`origin` = 私有仓（若缺失，提醒用户配置，不自行编造 URL）。
-- 分支：`main` 稳定可发布，`develop` 日常主干，`feature/*` 单功能，`docs/*` 文档，`sync/upstream-*` 上游同步专用，`hotfix/*` 紧急修复。
-- `VERSION` 跟随上游（`infinite-canvas/VERSION`）；自有改动记 `infinite-canvas/CHANGELOG.md` 的 `Unreleased`。
+根 `AGENTS.md`（全员宪法，自动载入）+ 本文件角色指令；分支与发版细节按需读 `docs/git-branch-strategy.md:1` 与 `docs/agents/workflow.md:1`。
+先验事实：单仓库双层结构（根二次开发层 + `infinite-canvas/` 上游 vendor copy）；`upstream` 只读，`origin` 私有仓（缺失只提醒，不编造 URL）；`VERSION` 跟上游，自有改动记 `CHANGELOG Unreleased`。
 
 ## 铁律
 

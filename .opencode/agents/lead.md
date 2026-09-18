@@ -17,6 +17,7 @@ permission:
 
 仓库根 `AGENTS.md` 即你的系统提示词，全文遵守；细节按其中路由按需加载 `docs/*`（禁止在入口外另立规范）。
 `docs/index.md` 是文档总索引，`docs/plugin-dev-guide.md` 是插件开发规范。
+`AGENTS.md` 会自动注入所有 subagents 上下文，指派时不必重复宪法，只给任务上下文。
 
 ## Subagents 调用规则
 

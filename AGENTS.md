@@ -1,6 +1,8 @@
 # AGENTS.md
 
 > 渐进式披露入口：本文仅暴露路径，细节按需加载 `docs/agents/*` 与 `docs/*`。禁止在入口堆长文本，高耦合内容已下沉至独立文档。
+>
+> 全员宪法：opencode 自动把本文注入 lead 与所有 subagents 上下文；各成员角色差异见 `.opencode/agents/*.md`，本文不再重复。
 
 ## 优先级
 
