@@ -130,24 +130,18 @@ function CharacterContent({ ctx }: CanvasNodeContentProps) {
                     onClick={closePreview}
                     onMouseDown={(e) => e.stopPropagation()}
                     onWheel={(e) => e.stopPropagation()}
-                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.55)", display: "grid", placeItems: "center", pointerEvents: "auto", padding: 24, boxSizing: "border-box" }}
+                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.75)", display: "grid", placeItems: "center", pointerEvents: "auto", padding: "10vh 10vw", boxSizing: "border-box" }}
                 >
-                    <div
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        style={{ background: ctx.theme.node.panel, border: `1px solid ${ctx.theme.node.stroke}`, borderRadius: 14, maxWidth: "76vw", maxHeight: "86vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}
-                    >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: `1px solid ${ctx.theme.node.stroke}`, fontSize: 13, fontWeight: 600 }}>
-                            <span>{(m.name as string) || "角色预览"}</span>
-                            <button
-                                type="button"
-                                onClick={closePreview}
-                                style={{ width: 24, height: 24, borderRadius: 12, border: `1px solid ${ctx.theme.node.stroke}`, background: "transparent", color: ctx.theme.node.text, cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}
-                            >
-                                ×
-                            </button>
-                        </div>
-                        <img src={result} alt="" style={{ maxWidth: "76vw", maxHeight: "72vh", objectFit: "contain", background: "#000" }} />
+                    <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "100%", maxHeight: "100%" }}>
+                        <img src={result} alt="" style={{ display: "block", maxWidth: "80vw", maxHeight: "80vh", objectFit: "contain", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }} />
+                        <button
+                            type="button"
+                            onClick={closePreview}
+                            title="关闭"
+                            style={{ position: "absolute", right: -14, top: -14, width: 28, height: 28, borderRadius: 14, border: "none", background: ctx.theme.toolbar.panel, color: ctx.theme.node.text, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, boxShadow: "0 4px 16px rgba(0,0,0,0.5)" }}
+                        >
+                            ×
+                        </button>
                     </div>
                 </div>
             )}
