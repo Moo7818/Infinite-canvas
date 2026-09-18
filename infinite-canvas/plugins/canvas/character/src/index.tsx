@@ -192,7 +192,7 @@ function ImagesField({ label, values, max, onChange, candidates, theme }: { labe
                                 }}
                             />
                         </label>
-                        {candidates.length > 0 && (
+                        {values.length < max && (
                             <button
                                 type="button"
                                 onClick={() => setPicking((v) => !v)}
