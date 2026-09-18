@@ -442,7 +442,19 @@ export const CanvasNode = React.memo(function CanvasNode({
             {!referenceSelectionState && !isGroup && (definition?.hasTargetHandle ?? true) ? <ConnectionHandleDot side="left" visible={hovered || isSelected || isConnecting} onMouseDown={(event) => onConnectStart(event, data.id, "target")} /> : null}
             {!referenceSelectionState && (definition?.hasSourceHandle ?? true) && data.type !== CanvasNodeType.Config ? <ConnectionHandleDot side="right" visible={hovered || isSelected || isConnecting} onMouseDown={(event) => onConnectStart(event, data.id, "source")} /> : null}
 
-            {showPanel && !isGroup && renderPanel ? <div className="absolute left-1/2 top-full z-[70] w-[600px] -translate-x-1/2 pt-4">{renderPanel(data)}</div> : null}
+            {showPanel && !isGroup && renderPanel ? (
+                <div
+                    className={`absolute z-[70] ${
+                        definition?.panelPlacement === "left"
+                            ? "right-full top-0 max-h-[72vh] w-[420px] overflow-y-auto pr-4"
+                            : definition?.panelPlacement === "right"
+                              ? "left-full top-0 max-h-[72vh] w-[420px] overflow-y-auto pl-4"
+                              : "left-1/2 top-full w-[600px] -translate-x-1/2 pt-4"
+                    }`}
+                >
+                    {renderPanel(data)}
+                </div>
+            ) : null}
         </div>
     );
 });

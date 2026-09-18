@@ -112,6 +112,7 @@ export type CanvasNodeDefinition = {
     hidePanel?: boolean; // Prevents click/create from opening a lower panel; intended for display-only nodes.
     transparentBackground?: boolean; // Makes the node card transparent so SVG or vector content blends into the canvas.
     autoOpenPanel?: boolean; // Opens a custom Panel on click; automatic opening otherwise applies only to built-ins.
+    panelPlacement?: "below" | "left" | "right"; // Custom Panel placement relative to the node; defaults to "below".
     useBuiltinPanel?: CanvasBuiltinPanelConfig; // Reuses the built-in generation panel instead of a custom Panel.
     // Lets the host provide an Interaction/Move toolbar toggle and control pointer events through metadata.interactive.
     interactionToggle?: boolean;

@@ -418,6 +418,7 @@ export default definePlugin({
             defaultMetadata: {},
             minimapColor: "#f472b6",
             autoOpenPanel: true,
+            panelPlacement: "left",
             hasTargetHandle: false, // 关闭上游传入：不接收其他节点的连线
             resource: (node) => {
                 const url = activeImage(node.metadata || {});

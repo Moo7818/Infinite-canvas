@@ -279,6 +279,7 @@ export type CanvasNodeDefinition = {
     // 为 true 时:节点卡片背景与边框透明,内容直接融入画布(如 SVG/矢量图);选中时仍显示选中描边
     transparentBackground?: boolean;
     autoOpenPanel?: boolean; // 为 true 时:单击节点自动打开自定义 Panel(默认仅内置节点单击自动打开)
+    panelPlacement?: "below" | "left" | "right"; // 自定义 Panel 相对节点的位置,默认下方
     // 复用宿主内置生成面板;与自定义 Panel 二选一(同时提供时优先 Panel)
     useBuiltinPanel?: CanvasBuiltinPanelConfig;
     // 为 true 时:宿主自动在工具条加「交互 ⇄ 移动」开关,并按 metadata.interactive 控制内容层指针事件。
