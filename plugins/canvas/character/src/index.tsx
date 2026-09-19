@@ -113,15 +113,17 @@ async function importFilesAsVersions(ctx: CanvasNodeContext, files: File[]): Pro
     if (!files.length) return;
     const urls = await Promise.all(files.map((f) => readImageFile(f)));
     const m = ctx.node.metadata || {};
-    const versions = (Array.isArray(m.versions) ? (m.versions as CharacterVersion[]) : []).filter((v) => v && v.image);
     const prompt = buildCharacterPrompt(m as CharacterFields).prompt;
     const added: CharacterVersion[] = urls.map((url) => ({ id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() }));
-    const next = [...versions, ...added];
     const last = added[added.length - 1];
     const d = await imageDims(last.image);
     const imgH = Math.min(520, Math.max(200, Math.round((300 * d.h) / d.w)));
     ctx.updateNode({ width: 300, height: imgH + 30 });
-    ctx.updateMetadata({ versions: next, activeVersionId: last.id, content: last.image, status: "success", generating: false, generateError: undefined });
+    ctx.updateMetadata((prev) => {
+        const cur = (Array.isArray(prev.versions) ? (prev.versions as CharacterVersion[]) : []).filter((v) => v && v.image);
+        const next = [...cur, ...added];
+        return { versions: next, activeVersionId: last.id, content: last.image, status: "success", generating: false, generateError: undefined };
+    });
 }
 
 // 工具条调起系统文件选择框（工具条项无 DOM 插槽，只能动态创建 input）。
@@ -326,8 +328,10 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const [styleCustom, setStyleCustom] = useState(false);
     const styleVal = (m.style as string) || "";
     const showCustomStyle = styleCustom || (styleVal !== "" && !STYLE_PRESETS.includes(styleVal));
-    // 模型下拉只保留 nano-2 / nano-pro / image 系列；无命中时回退全量，避免空下拉卡死。
-    const MODEL_ALLOW = ["nano-2", "nano-pro", "image"];
+    // 模型下拉默认 nano-2 / nano-pro / image 系列；metadata.modelAllow 非空数组可覆盖。
+    const MODEL_BASE = ["nano-2", "nano-pro", "image"];
+    const customAllow = (Array.isArray(m.modelAllow) ? (m.modelAllow as unknown[]) : []).filter((v): v is string => typeof v === "string" && v.length > 0);
+    const MODEL_ALLOW = customAllow.length ? customAllow : MODEL_BASE;
     const allModels = ctx.ai.listModels("image");
     const models = (() => {
         const hit = allModels.filter((o) => {
@@ -344,7 +348,7 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
         .map((n) => ({ id: n.id, title: n.title, url: nodeImageUrl(n) }))
         .filter((c): c is { id: string; title: string; url: string } => c.url !== null);
 
-    const set = (patch: CanvasNodeMetadata) => ctx.updateMetadata(patch);
+    const set = (patch: CanvasNodeMetadata | ((prev: CanvasNodeMetadata) => CanvasNodeMetadata)) => ctx.updateMetadata(patch);
     const setName = (name: string) => {
         ctx.updateNode({ title: name.trim() || "角色" });
         set({ name });
@@ -402,13 +406,15 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
             const url = res.images[0];
             await fitNode(url);
             // 每次生成自动追加为新版本并选中；老节点首次生成时把旧图收为版本 1。
-            const nextVersions = [...versions];
-            if (!nextVersions.length && typeof m.content === "string" && m.content) {
-                nextVersions.push({ id: newVersionId(), image: m.content, prompt: "", createdAt: "" });
-            }
             const ver: CharacterVersion = { id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() };
-            nextVersions.push(ver);
-            set({ versions: nextVersions, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined });
+            // 函数式追加：与工具条导入并发时以前面最新 state 为准，不丢更新。
+            set((prev) => {
+                const cur = (Array.isArray(prev.versions) ? (prev.versions as CharacterVersion[]) : []).filter((v) => v && v.image);
+                const base =
+                    !cur.length && typeof prev.content === "string" && prev.content ? [{ id: newVersionId(), image: prev.content, prompt: "", createdAt: "" }, ...cur] : cur;
+                const next = [...base, ver];
+                return { versions: next, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined };
+            });
         } catch (e) {
             const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
             // 连接层失败（无响应）与业务失败要区分：前者任务可能已在后台建成，提示用户不要连点。
