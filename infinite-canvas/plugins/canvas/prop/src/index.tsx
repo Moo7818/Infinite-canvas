@@ -333,9 +333,10 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
     // 生成态持久化：generating 进 metadata，关面板重开不丢失；在途请求靠模块级取消器接管。
     const [running, setRunning] = useState(Boolean((ctx.node.metadata || {}).generating));
     useEffect(() => {
-        // 兜底：generating 为真但本会话无在途请求（刷新/崩溃残留），清掉避免永久 disabled。
+        // 兜底：generating 为真但本会话无在途请求（刷新/崩溃残留）。
+        // 请求无法续跑（任务 id 随旧页面销毁），标记为中断而不是静默清空，让用户知道发生了什么。
         if ((ctx.node.metadata || {}).generating && !runningControllers.has(ctx.node.id)) {
-            ctx.updateMetadata({ generating: false });
+            ctx.updateMetadata({ generating: false, generateError: "页面刷新导致生成中断，后台任务状态未知；如需结果请重新生成。" });
             setRunning(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
