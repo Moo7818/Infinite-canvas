@@ -318,9 +318,9 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const cast = resolveCast(ctx.getNodes(), m);
     const rawDoc = ((m as GridFields).doc || "");
     const expandedText = typeof m.expanded === "string" ? m.expanded : "";
-    // 预览与终稿同语义：展开文仅当其来源文档与当前一致时采用，否则回退原文。
     const expandedFresh = expandedText !== "" && (m.expandedFrom as string) === rawDoc;
-    const preview = buildGridPrompt({ ...(m as GridFields), doc: expandedFresh ? expandedText : rawDoc, characters: cast.characters, spaceName: cast.spaceName, spaceImages: cast.spaceImages }).prompt;
+    // 提示词预览只展示结构（前缀/出场/空间/机位），调度正文不进预览框，终稿以生成时为准。
+    const preview = buildGridPrompt({ ...(m as GridFields), doc: "", characters: cast.characters, spaceName: cast.spaceName, spaceImages: cast.spaceImages }).prompt;
     const errMsg = error || (typeof m.generateError === "string" ? m.generateError : "");
     const charNodes = ctx.getNodes().filter((n) => n.type === "character:role");
     const spaceNodes = ctx.getNodes().filter((n) => n.type === "scene:view");
