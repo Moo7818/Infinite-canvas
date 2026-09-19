@@ -5,20 +5,17 @@ import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeData, CanvasN
 import type { ReactNode } from "react";
 
 export const PROMPT_PREFIX = "2*2四宫格拼图，按调度文档一次生成四帧静帧。";
+// 机位锁定：不可编辑，作用于全部四格。
+export const LOCKED_CAMERA = "固定机位从客厅角落斜上方45度俯拍";
 export const GRID_CELLS = 4;
-
-export type GridCell = {
-    characterId?: string;
-    characterName?: string; // 快照：节点被删后仍可显示名
-    state?: string;
-};
 
 export type GridFields = {
     name?: string;
-    cells?: GridCell[];
+    castIds?: string[]; // 统一传入：勾选的角色节点 id（有序）
+    castNames?: string[]; // 快照：与 castIds 对位，节点被删后仍可显示名
+    cellStates?: string[]; // 四格状态描述
     spaceId?: string;
     spaceName?: string; // 快照
-    camera?: string;
     style?: string;
     doc?: string;
 };
@@ -51,9 +48,27 @@ function nodeImage(n: CanvasNodeData): string[] {
     return typeof c === "string" && (c.startsWith("data:image/") || /^https?:\/\//i.test(c)) ? [c] : [];
 }
 
-function normalizeCells(m: CanvasNodeMetadata): GridCell[] {
-    const raw = Array.isArray(m.cells) ? (m.cells as GridCell[]) : [];
-    return [0, 1, 2, 3].map((i) => (raw[i] && typeof raw[i] === "object" ? raw[i] : {}));
+function normalizeCastNames(m: CanvasNodeMetadata): string[] {
+    const raw = Array.isArray(m.castNames) ? (m.castNames as unknown[]) : [];
+    return raw.filter((v): v is string => typeof v === "string");
+}
+
+function normalizeStates(m: CanvasNodeMetadata): string[] {
+    const raw = Array.isArray(m.cellStates) ? (m.cellStates as unknown[]) : [];
+    return [0, 1, 2, 3].map((i) => (typeof raw[i] === "string" ? (raw[i] as string) : ""));
+}
+
+function normalizeCastIds(m: CanvasNodeMetadata): string[] {
+    const ids = Array.isArray(m.castIds) ? (m.castIds as unknown[]).filter((v): v is string => typeof v === "string") : [];
+    if (ids.length) return ids;
+    // 兼容旧版按格分配：把各格角色 id 按序收拢为统一传入
+    const legacy = Array.isArray(m.cells) ? m.cells : [];
+    const out: string[] = [];
+    for (const c of legacy) {
+        const id = c && typeof c === "object" ? (c as { characterId?: unknown }).characterId : undefined;
+        if (typeof id === "string" && id && !out.includes(id)) out.push(id);
+    }
+    return out;
 }
 
 export type GridResolvedCell = { name: string; state: string; images: string[] };
@@ -63,12 +78,14 @@ export type GridCast = {
     spaceImages: string[];
 };
 
-// 活引用解析：按格序取角色节点当前图，空间取场景节点当前图；节点被删则该项留空（快照名保留）。
+// 活引用解析：勾选的角色节点当前图（有序），空间取场景节点当前图；节点被删则该项留空（快照名保留）。
 export function resolveCast(nodes: CanvasNodeData[], m: CanvasNodeMetadata): GridCast {
     const byId = new Map(nodes.map((n) => [n.id, n]));
-    const characters = normalizeCells(m).map((c) => {
-        const n = c.characterId ? byId.get(c.characterId) : undefined;
-        return { name: n?.title || c.characterName || "", state: c.state || "", images: n ? nodeImage(n) : [] };
+    const ids = normalizeCastIds(m);
+    const snaps = Array.isArray(m.castNames) ? (m.castNames as unknown[]) : [];
+    const characters = ids.map((id, i) => {
+        const n = byId.get(id);
+        return { name: n?.title || (typeof snaps[i] === "string" ? (snaps[i] as string) : ""), state: "", images: n ? nodeImage(n) : [] };
     });
     const spaceNode = typeof m.spaceId === "string" && m.spaceId ? byId.get(m.spaceId) : undefined;
     return {
@@ -100,38 +117,41 @@ export function buildGridPrompt(f: { name?: string; camera?: string; style?: str
     if (f.spaceName?.trim() || (f.spaceImages || []).length) {
         parts.push(`空间：${f.spaceName?.trim() || ""}${mark(f.spaceImages || [])}。`);
     }
-    if (f.camera?.trim()) parts.push(`统一机位：${f.camera.trim()}。`);
+    parts.push(`统一机位：${LOCKED_CAMERA}。`);
     const docText = f.doc?.trim() || "";
     if (docText) parts.push(`调度：${docText}${/[。？！？!]$/.test(docText) ? "" : "。"}`);
     if (f.style?.trim()) parts.push(`风格：${f.style.trim()}。`);
     return { prompt: parts.join(""), references };
 }
 
-// 由当前分配生成调度草稿（编号与拼装规则一致，人再改）。
+// 由统一传入生成调度草稿：出场名单（含编号）+ 四格空位 + 空间行，人再填每格状态。
 export function buildDispatchDraft(characters: GridResolvedCell[], spaceName: string, spaceImages: string[]): string {
     const references = collectRefs(characters, spaceImages);
     const pos = (img: string) => references.indexOf(img) + 1;
-    const lines = characters.map((c, i) => {
-        if (!c.name) return `格${i + 1}：（空）`;
-        const imgs = c.images.length ? `，用图片${c.images.map(pos).join("、")}` : "（暂无可用图）";
-        return `格${i + 1}：${c.name}${c.state}${imgs}`;
-    });
+    const lines: string[] = [];
+    const cast = characters
+        .filter((c) => c.name)
+        .map((c) => `${c.name}${c.images.length ? `（图片${c.images.map(pos).join("、")}）` : "（暂无可用图）"}`)
+        .join("、");
+    if (cast) lines.push(`出场：${cast}`);
     if (spaceName || spaceImages.length) {
-        lines.push(`空间：${spaceName}${spaceImages.length ? `，用图片${spaceImages.map(pos).join("、")}` : "（暂无可用图）"}`);
+        lines.push(`空间：${spaceName}${spaceImages.length ? `（图片${spaceImages.map(pos).join("、")}）` : "（暂无可用图）"}`);
     }
+    for (let i = 1; i <= GRID_CELLS; i++) lines.push(`格${i}：`);
     return lines.join("\n");
 }
 
 function filledCount(m: CanvasNodeMetadata, cast: GridCast): number {
     const r = m as Record<string, unknown>;
-    const textKeys = ["name", "camera", "style", "doc"];
+    const textKeys = ["name", "style", "doc"];
     const textCount = textKeys.filter((k) => {
         const v = r[k];
         return v !== undefined && v !== null && String(v).trim() !== "";
     }).length;
     const spaceCount = cast.spaceName || cast.spaceImages.length ? 1 : 0;
-    const cellCount = normalizeCells(m).filter((c) => c.characterId || (c.state || "").trim() !== "").length;
-    return textCount + spaceCount + cellCount;
+    const castCount = normalizeCastIds(m).length > 0 ? 1 : 0;
+    const stateCount = normalizeStates(m).filter((s) => s.trim() !== "").length;
+    return textCount + spaceCount + castCount + stateCount;
 }
 
 function readImageFile(file: File): Promise<string> {
@@ -318,17 +338,11 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const errMsg = error || (typeof m.generateError === "string" ? m.generateError : "");
     const charNodes = ctx.getNodes().filter((n) => n.type === "character:role");
     const spaceNodes = ctx.getNodes().filter((n) => n.type === "scene:view");
-    const cells = normalizeCells(m);
 
     const set = (patch: CanvasNodeMetadata) => ctx.updateMetadata(patch);
     const setName = (name: string) => {
         ctx.updateNode({ title: name.trim() || "宫格调度" });
         set({ name });
-    };
-    const setCell = (index: number, patch: Partial<GridCell>) => {
-        const next = normalizeCells(m);
-        next[index] = { ...next[index], ...patch };
-        set({ cells: next });
     };
 
     const input = { width: "100%", boxSizing: "border-box" as const, padding: "6px 10px", borderRadius: 8, border: `1px solid ${ctx.theme.node.stroke}`, background: "transparent", color: ctx.theme.node.text, fontSize: 13, outline: "none" };
@@ -360,8 +374,8 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
             const live = resolveCast(ctx.getNodes(), ctx.node.metadata || {});
             const { prompt, references } = buildGridPrompt({ ...(m as GridFields), characters: live.characters, spaceName: live.spaceName, spaceImages: live.spaceImages });
             const chosen = model || ctx.ai.defaultModel("image");
-            // 宫格默认 1:1；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
-            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "1:1", signal: controller.signal });
+            // 宫格默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
+            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
             await fitNode(url);
@@ -434,35 +448,58 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                         ))}
                     </select>
                 </div>
-                <label style={lab}>
-                    统一机位
-                    <input value={(m.camera as string) || ""} onChange={(e) => set({ camera: e.target.value })} placeholder="如：固定机位从客厅角落斜上方45度俯拍" style={{ ...input, marginTop: 4, fontWeight: 400 }} />
-                </label>
+                <div>
+                    <div style={{ ...lab, marginBottom: 4 }}>
+                        统一机位 <span style={{ fontSize: 11, fontWeight: 400, color: ctx.theme.node.muted }}>（锁定不可编辑）</span>
+                    </div>
+                    <div style={{ fontSize: 12, lineHeight: 1.6, padding: "8px 10px", borderRadius: 8, background: ctx.theme.node.fill }}>{LOCKED_CAMERA}</div>
+                </div>
                 <div>
                     <div style={{ ...lab, marginBottom: 4 }}>风格</div>
                     <PresetSelect value={(m.style as string) || ""} presets={STYLE_PRESETS} placeholder="自定义风格，最多20字" onChange={(v) => set({ style: v })} style={{ ...select, marginTop: 0 }} />
                 </div>
             </FieldGroup>
-            <FieldGroup title="四格分配" theme={ctx.theme}>
-                {cells.map((c, i) => (
-                    <div key={i} style={{ border: `1px dashed ${ctx.theme.node.stroke}`, borderRadius: 8, padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600 }}>格{i + 1}</div>
-                        <select
-                            value={c.characterId || ""}
+            <FieldGroup title="角色（统一传入）" theme={ctx.theme}>
+                {charNodes.length ? (
+                    charNodes.map((n) => {
+                        const ids = normalizeCastIds(m);
+                        const checked = ids.includes(n.id);
+                        return (
+                            <label key={n.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                        if (checked) {
+                                            const idx = ids.indexOf(n.id);
+                                            set({ castIds: ids.filter((id) => id !== n.id), castNames: normalizeCastNames(m).filter((_, j) => j !== idx) });
+                                        } else {
+                                            set({ castIds: [...ids, n.id], castNames: [...normalizeCastNames(m).slice(0, ids.length), n.title] });
+                                        }
+                                    }}
+                                />
+                                {n.title}
+                            </label>
+                        );
+                    })
+                ) : (
+                    <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>画布上暂无角色节点</div>
+                )}
+            </FieldGroup>
+            <FieldGroup title="四格状态" theme={ctx.theme}>
+                {normalizeStates(m).map((s, i) => (
+                    <div key={i}>
+                        <div style={{ ...lab, marginBottom: 4 }}>格{i + 1}</div>
+                        <input
+                            value={s}
                             onChange={(e) => {
-                                const n = charNodes.find((x) => x.id === e.target.value);
-                                setCell(i, { characterId: e.target.value || undefined, characterName: n?.title || undefined });
+                                const next = normalizeStates(m);
+                                next[i] = e.target.value;
+                                set({ cellStates: next });
                             }}
-                            style={{ ...select }}
-                        >
-                            <option value="">无角色</option>
-                            {charNodes.map((n) => (
-                                <option key={n.id} value={n.id}>
-                                    {n.title}
-                                </option>
-                            ))}
-                        </select>
-                        <input value={c.state || ""} onChange={(e) => setCell(i, { state: e.target.value })} placeholder="本格状态，如：苏近景" style={{ ...input, fontWeight: 400 }} />
+                            placeholder={`格${i + 1}状态，如：苏近景`}
+                            style={{ ...input, marginTop: 0, fontWeight: 400 }}
+                        />
                     </div>
                 ))}
             </FieldGroup>
@@ -536,7 +573,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     </button>
                 )}
             </div>
-            <div style={{ fontSize: 11, color: ctx.theme.node.muted }}>尺寸默认 1:1 · 画质跟随全局图片设置（建议 2K）</div>
+            <div style={{ fontSize: 11, color: ctx.theme.node.muted }}>尺寸默认 16:9 · 画质跟随全局图片设置（建议 2K）</div>
             {errMsg && <div style={{ fontSize: 12, color: "#ef4444", whiteSpace: "pre-wrap" }}>{errMsg}</div>}
         </div>
     );
