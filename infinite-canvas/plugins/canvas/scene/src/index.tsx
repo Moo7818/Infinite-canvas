@@ -431,7 +431,9 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
             nextVersions.push(ver);
             set({ versions: nextVersions, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined });
         } catch (e) {
-            const msg = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
+            const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
+            // 连接层失败（无响应）与业务失败要区分：前者任务可能已在后台建成，提示用户不要连点。
+            const msg = /network error|ERR_|Failed to fetch|timeout|ECONN|aborted/i.test(raw) && raw !== "已取消" ? `${raw}（连接中断，后台任务可能仍在执行；请勿连点，稍后手动重试）` : raw;
             setError(msg);
             // 错误持久化：面板关闭重开仍可见；节点卡片底部同步红标。
             set({ generating: false, generateError: msg });
