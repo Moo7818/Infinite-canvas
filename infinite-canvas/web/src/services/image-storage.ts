@@ -155,7 +155,16 @@ export async function setImageBlob(storageKey: string, blob: Blob) {
 export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }, options?: ImageReadOptions) {
     const url = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
     if (!url || url.startsWith("data:")) return url;
-    return blobToDataUrl(await fetchImageBlob(url, options));
+    try {
+        return blobToDataUrl(await fetchImageBlob(url, options));
+    } catch (error) {
+        // A stale blob: URL (e.g. after a page reload) can still be recovered from local storage.
+        if (url.startsWith("blob:") && image.storageKey) {
+            const stored = await resolveImageUrl(image.storageKey, "");
+            if (stored && stored !== url) return blobToDataUrl(await fetchImageBlob(stored, options));
+        }
+        throw error;
+    }
 }
 
 export async function deleteStoredImages(keys: Iterable<string>) {

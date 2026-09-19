@@ -7,9 +7,12 @@ export type UploadedFile = { url: string; storageKey: string; bytes: number; mim
 
 const store = localforage.createInstance({ name: "infinite-canvas", storeName: "media_files" });
 const objectUrls = new Map<string, string>();
+const MEDIA_DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
 
-export async function uploadMediaFile(input: string | Blob, prefix = "file"): Promise<UploadedFile> {
-    const blob = typeof input === "string" ? await (await fetch(withLocalProxy(input))).blob() : input;
+type MediaUploadOptions = { signal?: AbortSignal; timeoutMs?: number };
+
+export async function uploadMediaFile(input: string | Blob, prefix = "file", options?: MediaUploadOptions): Promise<UploadedFile> {
+    const blob = typeof input === "string" ? await fetchMediaBlob(input, options) : input;
     const storageKey = `${prefix}:${nanoid()}`;
     await store.setItem(storageKey, blob);
     const url = URL.createObjectURL(blob);
@@ -65,6 +68,28 @@ export function collectMediaStorageKeys(value: unknown, keys = new Set<string>()
     if ("storageKey" in value && typeof value.storageKey === "string" && value.storageKey.includes(":")) keys.add(value.storageKey);
     Object.values(value).forEach((item) => (Array.isArray(item) ? item.forEach((child) => collectMediaStorageKeys(child, keys)) : collectMediaStorageKeys(item, keys)));
     return keys;
+}
+
+async function fetchMediaBlob(url: string, options?: MediaUploadOptions) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const abort = () => controller.abort();
+    if (options?.signal?.aborted) abort();
+    else options?.signal?.addEventListener("abort", abort, { once: true });
+    const timer = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, options?.timeoutMs ?? MEDIA_DOWNLOAD_TIMEOUT_MS);
+    try {
+        return await (await fetch(withLocalProxy(url), { signal: controller.signal })).blob();
+    } catch (error) {
+        if (options?.signal?.aborted) throw (options.signal.reason instanceof Error ? options.signal.reason : new DOMException("Aborted", "AbortError"));
+        if (timedOut) throw new Error("媒体文件下载超时");
+        throw error;
+    } finally {
+        window.clearTimeout(timer);
+        options?.signal?.removeEventListener("abort", abort);
+    }
 }
 
 function readVideoMeta(url: string) {
