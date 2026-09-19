@@ -13,6 +13,7 @@
 | [二次开发路线](./roadmap.md) | 方向与待办 |
 | [Git 分支策略](./git-branch-strategy.md) | 双层目录 vendor copy 管理、上游同步、发版 |
 | [插件开发指南](./plugin-dev-guide.md) | 插件契约/宿主机制/ctx 能力/工程流/批量约定 |
+| [Grsai 渠道集成](./grsai-integration.md) | 接口行为/三故障判定/版本确认/async 状态 |
 | [上游摘要](./upstream-summary.md) | 上游功能/部署文档指路（不复制原文） |
 
 ## AI 行为约束（按需加载）
