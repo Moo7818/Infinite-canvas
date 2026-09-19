@@ -402,7 +402,10 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
 
     const generate = async () => {
         // 防重复提交：Map 检查与占用是同步代码，不存在竞态；running/metadata 只做 UI 与跨面板持久。
-        if (runningControllers.has(ctx.node.id)) return;
+        if (runningControllers.has(ctx.node.id)) {
+            console.debug("[prop] 重复提交已拦截");
+            return;
+        }
         if (running || Boolean((ctx.node.metadata || {}).generating)) return;
         const controller = new AbortController();
         runningControllers.set(ctx.node.id, controller);
@@ -413,6 +416,7 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
             const { prompt, references } = buildPropPrompt(m as PropFields);
             const chosen = model || ctx.ai.defaultModel("image");
             // 默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
+            console.info(`[prop] 提交生成 参考图${references.length}张`);
             const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
@@ -559,7 +563,7 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
 export default definePlugin({
     id: "prop",
     name: "道具节点",
-    version: "1.0.1",
+    version: "1.0.2",
     description: "填写道具表单，拼装提示词并用参考图生成道具图",
     nodes: [
         {
