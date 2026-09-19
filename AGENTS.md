@@ -1,6 +1,8 @@
 # AGENTS.md
 
 > 渐进式披露入口：本文仅暴露路径，细节按需加载 `docs/agents/*` 与 `docs/*`。禁止在入口堆长文本，高耦合内容已下沉至独立文档。
+>
+> 全员宪法：opencode 自动把本文注入 lead 与所有 subagents 上下文；各成员角色差异见 `.opencode/agents/*.md`，本文不再重复。
 
 ## 优先级
 
@@ -20,13 +22,17 @@
 | 集成指引 | `docs/agents/integration.md:1` |
 | 分支策略 | `docs/git-branch-strategy.md:1` |
 | 架构/技术栈/产品/路线 | `docs/architecture.md:1`, `docs/tech-stack.md:1`, `docs/product-design.md:1`, `docs/roadmap.md:1` |
-| 人机视频工厂背景 | `docs/project-background.md:1` |
+| 插件开发指南 | `docs/plugin-dev-guide.md:1` |
+| Agent 团队 | `.opencode/agents/lead.md:1`（主智能体，宪法即本文），`.opencode/agents/git-keeper.md:1`，`.opencode/agents/plugin-dev.md:1` |
+| 上游功能/部署指路 | `docs/upstream-summary.md:1`（只索引，不复制原文） |
+| Grsai 渠道集成 | `docs/grsai-integration.md:1`（接口行为/三故障判定） |
 | 文档总览索引 | `docs/index.md:1`（唯一不沉底的全量索引） |
-| 人机视频工厂背景 | `docs/project-background.md:1` |
 
 ## 约束
 
 - 按需加载：仅读与当前任务相关的文档，不预读全量
+- 职责隔离：各成员仅加载与自身角色和当前任务相关的文档；跨职责内容由 lead 汇总，不下放
+- 权限边界由各 agent 的 permission 执行，不靠隐藏指令控制
 - 修改时同步更新对应 `docs/agents/*`，保持入口与细节一致
 - 不在 `AGENTS.md` 新增长段细节，新增规则写入最相关的 `docs/agents/*`
 

@@ -38,6 +38,9 @@ export type CanvasNodeToolbarItem = {
     danger?: boolean;
 };
 
+// Metadata patch: object merge, or an updater receiving the latest metadata (for concurrent read-modify-write).
+export type MetadataPatch = CanvasNodeMetadata | ((prev: CanvasNodeMetadata) => CanvasNodeMetadata);
+
 // Context injected while rendering each node; the primary interface between plugins and the canvas.
 export type CanvasNodeContext = {
     node: CanvasNodeData;
@@ -45,7 +48,7 @@ export type CanvasNodeContext = {
     scale: number;
     isSelected: boolean; // Whether this node is selected, used to enable iframe interaction on demand.
     // Node data.
-    updateMetadata: (patch: CanvasNodeMetadata) => void;
+    updateMetadata: (patch: MetadataPatch) => void;
     updateNode: (patch: Partial<Pick<CanvasNodeData, "title" | "width" | "height">>) => void;
     // Graph access.
     getNode: (id: string) => CanvasNodeData | null;
@@ -81,7 +84,7 @@ export type CanvasPluginHost = {
     getUpstream: (nodeId: string) => CanvasNodeData[];
     getDownstream: (nodeId: string) => CanvasNodeData[];
     updateNode: (nodeId: string, patch: Partial<Pick<CanvasNodeData, "title" | "width" | "height">>) => void;
-    updateMetadata: (nodeId: string, patch: CanvasNodeMetadata) => void;
+    updateMetadata: (nodeId: string, patch: MetadataPatch) => void;
     applyOps: (ops: CanvasAgentOp[]) => void;
     // AI generation using the current canvas model and credential configuration.
     ai: CanvasPluginAi;
@@ -108,9 +111,11 @@ export type CanvasNodeDefinition = {
     minimapColor?: string;
     showInCreateMenu?: boolean; // Defaults to true.
     hasSourceHandle?: boolean; // Right-side output handle; defaults to true.
+    hasTargetHandle?: boolean; // Left-side input handle; defaults to true.
     hidePanel?: boolean; // Prevents click/create from opening a lower panel; intended for display-only nodes.
     transparentBackground?: boolean; // Makes the node card transparent so SVG or vector content blends into the canvas.
     autoOpenPanel?: boolean; // Opens a custom Panel on click; automatic opening otherwise applies only to built-ins.
+    panelPlacement?: "below" | "left" | "right"; // Custom Panel placement relative to the node; defaults to "below".
     useBuiltinPanel?: CanvasBuiltinPanelConfig; // Reuses the built-in generation panel instead of a custom Panel.
     // Lets the host provide an Interaction/Move toolbar toggle and control pointer events through metadata.interactive.
     interactionToggle?: boolean;

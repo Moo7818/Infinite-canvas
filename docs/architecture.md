@@ -1,56 +1,57 @@
-# 架构设计
+# 架构设计（基于上游 v0.18.0 实测）
 
 ## 1 整体分层
 
 ```
-UI 层      pages/* + components/canvas/* (AntD + Tailwind + lucide-react)
-状态层     stores/* + stores/canvas/* (Zustand5)
-引擎层     lib/canvas/* (15文件: node-registry/plugin-loader/canvas-agent-ops/geometry)
-服务层     services/api/* (image.ts 915行 全量AI网关) + image-storage/file-storage
-持久层     lib/localforage-storage.ts → localforage(IndexDB) + localStorage 降级
-类型层     types/canvas.ts + types/canvas-plugin.ts
-本地Agent  canvas-agent/src/server/http.ts(Express+SSE) + canvas/session.ts(MCP会话)
-插件层     plugins/canvas/sdk + template/html/markdown/svg/panorama/sticky-note
+UI 层      web/src/pages/* + web/src/components/canvas/*（AntD + Tailwind + lucide-react）
+状态层     web/src/stores/* + web/src/stores/canvas/*（Zustand5）
+引擎层     web/src/lib/canvas/*（14 文件：node-registry / plugin-loader / canvas-agent-ops / geometry…）
+服务层     web/src/services/api/*（image / video / audio / model-plugin / request / local-proxy…）
+持久层     web/src/lib/localforage-storage.ts → localforage（IndexedDB），小配置走 localStorage
+类型层     web/src/types/canvas.ts + web/src/types/canvas-plugin.ts
+本地 Agent canvas-agent/src/server/http.ts（Express + SSE）+ canvas-agent/src/canvas/session.ts（MCP 会话）
+插件层     plugins/canvas/sdk + template / registry + html / markdown / svg / panorama / sticky-note
 ```
 
-**无后端设计**：`infinite-canvas/web/src/stores/use-config-store.ts:332 buildApiUrl` 浏览器直连用户 `baseUrl`，`AGENTS.md:92` 画布/素材全量本地化。
+**无后端设计**：浏览器直连用户配置的 `baseUrl`，多渠道见 `infinite-canvas/web/src/stores/use-config-store.ts:18`（`ModelChannel`）与 `:28`（`channelMode`）。
 
 ## 2 目录映射
 
 ```
 infinite-canvas/
-├── web/src/router.tsx:15        # 8路由: /,/image,/video,/assets,/prompts,/canvas,/canvas/:id,/config
-├── web/src/pages/canvas/project.tsx # 单项目工作台（viewport/节点/连线/工具栏整合）
-├── web/src/stores/canvas/use-canvas-store.ts:63 # projects持久化 400ms节流
-├── web/src/stores/use-config-store.ts:192       # 多渠道 ModelChannel + 四类默认模型
-├── web/src/stores/use-agent-store.ts:98         # SSE连接/线程/权限
-├── web/src/lib/canvas/canvas-agent-ops.ts:7    # 8种 CanvasAgentOp 纯函数归约
-├── canvas-agent/src/server/http.ts:18 startHttpServer # 127.0.0.1:17371 + validToken:538
-├── canvas-agent/src/canvas/session.ts:42 CanvasSession # 多Tab隔离 + Codex状态机
-├── plugins/canvas/sdk/src/types.ts              # CanvasPlugin 契约
-└── .github/workflows/*                          # 4个 v* tag触发流
+├── web/src/router.tsx:15              # 8 路由（+ * 兜底 NotFound）
+├── web/src/pages/canvas/project.tsx   # 单项目工作台（视口/节点/连线/工具栏整合）
+├── web/src/stores/canvas/             # 画布域 store（项目、插件、侧面板…）
+├── web/src/stores/use-config-store.ts:18  # 多渠道 ModelChannel + 四类默认模型
+├── web/src/stores/use-agent-store.ts  # Agent 连接/线程/权限
+├── web/src/lib/canvas/canvas-agent-ops.ts:7  # 8 种 CanvasAgentOp 纯函数归约
+├── canvas-agent/src/config.ts:6       # DEFAULT_PORT = 17371
+├── canvas-agent/src/server/http.ts:18 # startHttpServer，127.0.0.1 监听（:434）
+├── plugins/canvas/sdk/src/types.ts    # CanvasPlugin 契约
+└── docs/content/docs/                 # 上游用户文档站（Next16 + Fumadocs，见 upstream-summary.md）
 ```
 
 ## 3 画布引擎
 
-- **视口** `infinite-canvas/web/src/components/canvas/infinite-canvas.tsx:21`：受控 `viewport{x,y,k}`，`Ctrl/Space`切pan，按鼠标锚点缩放0.05~5，RAF节流平移。
-- **节点** `types/canvas.ts:12/87`：`CanvasNodeType(Image|Text|Config|Video|Audio|Group|插件扩展)`，`CanvasNodeData{position,width,height,metadata}`，`metadata`含 `content/prompt/model/size/references/storageKey` + 插件自定义键。
-- **工厂** `lib/canvas/canvas-node-factory.ts:9` 按 `node-registry.ts:53 getNodeSpec` 决尺寸。
-- **操作归约** `lib/canvas/canvas-agent-ops.ts:37 applyCanvasAgentOps` 供前端与Agent共用。
-- **资源引用** `canvas-resource-references.ts` 把上游节点解析为 `CanvasResource{kind:'image'|'text'}` 供生成节点消费。
+* **视口** `infinite-canvas/web/src/components/canvas/infinite-canvas.tsx`：受控 `viewport{x,y,k}`，缩放/平移。
+* **节点** `infinite-canvas/web/src/types/canvas.ts:12`：`CanvasNodeType` 6 内置（image/text/config/video/audio/group）；`:21` 插件类型为开放字符串 `"<pluginId>:<name>"`；`:90` `CanvasNodeData{position,width,height,metadata}`。
+* **工厂** `infinite-canvas/web/src/lib/canvas/canvas-node-factory.ts` 按 `node-registry.ts` 的 `getNodeSpec` 决尺寸（未注册类型回退 340×240）。
+* **操作归约** `infinite-canvas/web/src/lib/canvas/canvas-agent-ops.ts:7`：`add_node / update_node / delete_node / delete_connections / connect_nodes / set_viewport / select_nodes / run_generation`，前端与 Agent 共用同一套语义。
+* **资源引用** `infinite-canvas/web/src/lib/canvas/canvas-resource-references.ts` 把上游节点解析为资源，供生成节点消费。
 
 ## 4 本地 Agent
 
-`canvas-agent/src/server/http.ts:18`：`loadConfig(true)` 生成 `token=crypto.randomBytes(18):21 0600落盘`，`express.json 30mb:106`，`setCors:521` 记录首个 `Origin`，`validToken:538` 验 `?token`或`x-canvas-agent-token`。
-
-**会话** `canvas/session.ts:42`：`clients/map + canvasStates/map` 多Tab隔离，`target=bound||active:76`，`codexState{busy,threadId,turnId}` + `conversationState{revision,status,mcpStatuses}` 状态机 `idle→preparing→ready→running`，`requestCanvasTool:489` 经 SSE `tool_call` → 前端执行 → `/canvas/result` 回填30s超时。
-
-**Codex** `agent/codex.ts:54` `codexQueue` Promise串行，`codex-client.ts:71 spawn(codex app-server)` JSON-RPC，`generateCodexSkillDraft` 时 `canvasSkillSource:293` 裁剪300节点/600连线并脱敏 `apiKey/token/webUrl`。
+`canvas-agent/src/server/http.ts:18`：`startHttpServer`，端口取 `PORT` 或配置 URL 端口或 `DEFAULT_PORT(17371)`（见 `:20` 与 `config.ts:6`），`app.listen(port, "127.0.0.1")`（`:434`）。
+前端侧 `web/src/services/api/canvas-agent.ts` 对接；会话/状态机在 `canvas-agent/src/canvas/session.ts`。
 
 ## 5 插件系统
 
-`plugins/canvas/sdk/src/types.ts` 定义 `CanvasPlugin{id,nodes,css,setup}`，`CanvasNodeContext:212` 暴露 `updateMetadata/getUpstream/applyOps/ai/storage/emit`。加载器 `web/src/lib/canvas/plugin-loader.ts:11 evaluatePluginSource` 以 `Blob→import(--vite-ignore)` 评估，`activatePlugin:31` 注册+注样式。`plugin-runtime.ts:28 getPluginRuntime` 单例注入 `React/host`。官方5插件打包进 `plugins-dist` 孤儿分支。
+* 契约 `plugins/canvas/sdk/src/types.ts`：`CanvasPlugin{id, nodes, css, setup}`；作者入口 `sdk/src/define-plugin.ts:1`（对象或工厂两种形式）。
+* 加载 `web/src/lib/canvas/plugin-loader.ts:11`：`evaluatePluginSource` 以 `Blob → import(/* @vite-ignore */ url)` 动态评估远端源码；`:31` `activatePlugin` 注册节点定义 + 注入 `css` + 执行 `setup(runtime)`。
+* 注册 `web/src/lib/canvas/node-registry.ts`：`registerNodeDefinitions(defs, pluginId)` / `unregisterPluginNodes(pluginId)`，`ownerByType` 记录归属，卸载时整组移除。
+* 官方模板与注册器：`plugins/canvas/template/`、`plugins/canvas/registry/`；内置示例：`html/markdown/svg/panorama/sticky-note/`。
 
 ## 6 数据流
 
-`用户交互→store更新→400ms节流→localforage→(可选)WebDAV同步`；`Agent/MCP→Session.tool_call→前端applyOps→postState回传`。消息三级归属 `threadId/turnId/itemId` `AGENTS.md:92`，实时事件仅补未物化turn。
+`用户交互 → store 更新 → localforage 持久化 →（可选）WebDAV 同步`；`Agent/MCP → tool_call → 前端 applyOps → 状态回传`。
+自定义模型调用脚本经 `web/src/services/api/model-plugin.ts` 沙箱执行（`http/poll/sleep/signal/onDelta/onProgress` 注入）。

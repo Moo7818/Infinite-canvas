@@ -215,7 +215,8 @@ export type CanvasNodeContext = {
     theme: CanvasTheme;
     scale: number;
     isSelected: boolean; // 该节点当前是否被选中(用于按需启用 iframe 交互等)
-    updateMetadata: (patch: CanvasNodeMetadata) => void;
+    // 对象合并，或接收最新 metadata 的更新函数(并发读改写用函数式，避免后完成者覆盖)
+    updateMetadata: (patch: CanvasNodeMetadata | ((prev: CanvasNodeMetadata) => CanvasNodeMetadata)) => void;
     updateNode: (patch: Partial<Pick<CanvasNodeData, "title" | "width" | "height">>) => void;
     // 图访问
     getNode: (id: string) => CanvasNodeData | null;
@@ -274,10 +275,12 @@ export type CanvasNodeDefinition = {
     minimapColor?: string;
     showInCreateMenu?: boolean; // 默认 true
     hasSourceHandle?: boolean; // 右侧输出连接点,默认 true
+    hasTargetHandle?: boolean; // 左侧输入连接点,默认 true
     hidePanel?: boolean; // 为 true 时:点击/新建不弹出下方面板(含内置生图面板),纯展示型节点用
     // 为 true 时:节点卡片背景与边框透明,内容直接融入画布(如 SVG/矢量图);选中时仍显示选中描边
     transparentBackground?: boolean;
     autoOpenPanel?: boolean; // 为 true 时:单击节点自动打开自定义 Panel(默认仅内置节点单击自动打开)
+    panelPlacement?: "below" | "left" | "right"; // 自定义 Panel 相对节点的位置,默认下方
     // 复用宿主内置生成面板;与自定义 Panel 二选一(同时提供时优先 Panel)
     useBuiltinPanel?: CanvasBuiltinPanelConfig;
     // 为 true 时:宿主自动在工具条加「交互 ⇄ 移动」开关,并按 metadata.interactive 控制内容层指针事件。
