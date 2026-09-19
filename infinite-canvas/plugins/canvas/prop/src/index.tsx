@@ -484,6 +484,31 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 ) : (
                     <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>生成后自动保存版本，点击切换，× 删除</div>
                 )}
+                <label style={{ ...btn, alignSelf: "flex-start", cursor: "pointer" }}>
+                    导入图片
+                    <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        hidden
+                        onChange={async (e) => {
+                            const files = Array.from(e.target.files || []);
+                            e.target.value = "";
+                            if (!files.length) return;
+                            try {
+                                const urls = await Promise.all(files.map((f) => readImageFile(f)));
+                                const prompt = buildPropPrompt(m as PropFields).prompt;
+                                const added: PropVersion[] = urls.map((url) => ({ id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() }));
+                                const next = [...versions, ...added];
+                                const last = added[added.length - 1];
+                                await fitNode(last.image);
+                                set({ versions: next, activeVersionId: last.id, content: last.image, status: "success", generating: false, generateError: undefined });
+                            } catch (err) {
+                                setError(err instanceof Error ? err.message : String(err));
+                            }
+                        }}
+                    />
+                </label>
             </FieldGroup>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <select value={model} onChange={(e) => pickModel(e.target.value)} style={{ ...select, flex: 1 }}>
