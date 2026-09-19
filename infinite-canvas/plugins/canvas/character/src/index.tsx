@@ -243,6 +243,28 @@ function FieldGroup({ title, children, theme }: { title: string; children: React
     );
 }
 
+// 下载选中版本：dataURL 直下；远端 URL 先抓成 blob（跨域失败时抛错提示）。
+async function downloadImage(url: string, filename: string): Promise<void> {
+    let tmp = "";
+    try {
+        let href = url;
+        if (/^https?:\/\//i.test(url)) {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`下载失败（${res.status}）`);
+            tmp = URL.createObjectURL(await res.blob());
+            href = tmp;
+        }
+        const a = document.createElement("a");
+        a.href = href;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    } finally {
+        if (tmp) setTimeout(() => URL.revokeObjectURL(tmp), 5000);
+    }
+}
+
 function imageDims(src: string): Promise<{ w: number; h: number }> {
     return new Promise((resolve) => {
         const img = new Image();
@@ -304,6 +326,7 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const btn = { padding: "6px 14px", borderRadius: 8, border: `1px solid ${ctx.theme.node.stroke}`, background: ctx.theme.toolbar.panel, color: ctx.theme.node.text, cursor: "pointer", fontSize: 13 } as const;
     const versions = (Array.isArray(m.versions) ? (m.versions as CharacterVersion[]) : []).filter((v) => v && v.image);
     const activeId = versions.some((v) => v.id === m.activeVersionId) ? (m.activeVersionId as string) : versions[versions.length - 1]?.id;
+    const vNum = versions.findIndex((v) => v.id === activeId) + 1 || versions.length;
 
     // 节点宽高自适应图片比例：宽固定 300，图高按比例换算后夹紧，+30 留给底部状态条。
     const fitNode = async (url: string) => {
@@ -475,6 +498,15 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     </div>
                 ) : (
                     <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>生成后自动保存版本，点击切换，× 删除</div>
+                )}
+                {versions.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => downloadImage(activeImage(m), `${((m.name as string) || "角色").replace(/[\\/:*?"<>|]/g, "_")}-v${vNum}.png`).catch((e) => setError(e instanceof Error ? e.message : String(e)))}
+                        style={{ ...btn, alignSelf: "flex-start" }}
+                    >
+                        下载选中版本
+                    </button>
                 )}
             </FieldGroup>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
