@@ -354,7 +354,8 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
     const cancel = () => runningControllers.get(ctx.node.id)?.abort();
 
     const generate = async () => {
-        // 防重复提交：内存态 + 持久态双保险
+        // 防重复提交：Map 检查与占用是同步代码，不存在竞态；running/metadata 只做 UI 与跨面板持久。
+        if (runningControllers.has(ctx.node.id)) return;
         if (running || Boolean((ctx.node.metadata || {}).generating)) return;
         const controller = new AbortController();
         runningControllers.set(ctx.node.id, controller);
