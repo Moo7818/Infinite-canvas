@@ -13,7 +13,7 @@ import { canvasThemes } from "@/lib/canvas-theme";
 import type { CanvasNodeToolbarItem, CanvasPluginAi, CanvasPluginHost } from "@/types/canvas-plugin";
 import type { ReferenceImage } from "@/types/image";
 import type { CanvasAgentOp } from "@/lib/canvas/canvas-agent-ops";
-import type { CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
+import type { CanvasConnection, CanvasNodeData, CanvasNodeMetadata, ViewportTransform } from "@/types/canvas";
 
 type CanvasTheme = (typeof canvasThemes)[keyof typeof canvasThemes];
 
@@ -105,7 +105,14 @@ export function usePluginHost(params: PluginHostParams) {
                     .map((conn) => nodesRef.current.find((node) => node.id === conn.toNodeId))
                     .filter((node): node is CanvasNodeData => Boolean(node)),
             updateNode: (nodeId, patch) => setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, ...patch } : node))),
-            updateMetadata: (nodeId, patch) => setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, ...patch } } : node))),
+            updateMetadata: (nodeId, patch) =>
+                setNodes((prev) =>
+                    prev.map((node) => {
+                        if (node.id !== nodeId) return node;
+                        const resolved = typeof patch === "function" ? (patch as (prev: CanvasNodeMetadata) => CanvasNodeMetadata)(node.metadata || {}) : patch;
+                        return { ...node, metadata: { ...node.metadata, ...resolved } };
+                    }),
+                ),
             applyOps: (ops) => applyAgentOps(ops),
             ai: pluginAi,
             openPanel: (nodeId) => setDialogNodeId(nodeId),
