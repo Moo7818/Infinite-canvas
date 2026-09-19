@@ -6,19 +6,32 @@ permission:
   edit: deny
   bash:
     "*": ask
+    "git status": allow
     "git status *": allow
+    "git diff": allow
     "git diff *": allow
+    "git log": allow
     "git log *": allow
+    "git branch": allow
     "git branch *": allow
+    "git remote": allow
     "git remote *": allow
+    "git show": allow
     "git show *": allow
     "git stash list": allow
+    "git add": allow
     "git add *": allow
+    "git commit": allow
     "git commit *": allow
+    "git checkout": allow
     "git checkout *": allow
+    "git merge": allow
     "git merge *": allow
+    "git stash": allow
     "git stash *": allow
+    "git tag": allow
     "git tag *": allow
+    "git fetch": allow
     "git fetch *": allow
     "git push *": ask
     "git pull *": ask
