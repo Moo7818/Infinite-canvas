@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 
 export const PROMPT_PREFIX = "2*2四宫格拼图，按调度文档一次生成四帧静帧。";
 // 机位锁定：不可编辑，作用于全部四格。
-export const LOCKED_CAMERA = "固定机位从客厅角落斜上方45度俯拍";
+export const LOCKED_CAMERA = "固定机位从空间角落斜上方45度俯拍";
 
 export type GridFields = {
     name?: string;
