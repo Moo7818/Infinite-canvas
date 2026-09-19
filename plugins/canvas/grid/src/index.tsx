@@ -4,7 +4,7 @@ import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
 import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import type { ReactNode } from "react";
 
-export const PROMPT_PREFIX = "2*2四宫格人物调度图，非分镜拼图：同一固定机位一次生成四帧人物调度静帧，按调度文档执行。";
+export const PROMPT_PREFIX = "2*2四宫格人物调度图：同一固定机位一次生成四帧人物调度静帧，按调度文档执行。";
 // 机位锁定：不可编辑，作用于全部四格。
 export const LOCKED_CAMERA = "固定机位空间斜上方45度俯拍，广角，光线自然，照片级写实，电影级光影";
 
