@@ -1,7 +1,7 @@
 // 道具节点:点击左侧弹出表单 → 拼装提示词 → 参考图生成道具图。
 // 生成结果自动追加版本并写回本节点展示;下游输出当前选中版本图。
 import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
-import type { CanvasNodeContentProps, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
+import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import type { ReactNode } from "react";
 
 export const PROMPT_PREFIX = "产品摄影，纯白色背景，影棚柔光，高精度细节呈现，无人物、无水印。";
@@ -134,6 +134,35 @@ function imageDims(src: string): Promise<{ w: number; h: number }> {
 
 // 在途生成的取消器：模块常驻，面板开关不影响；刷新后 Map 为空，靠 generating 残留自愈。
 const runningControllers = new Map<string, AbortController>();
+
+// 导入图片新增版本：面板与工具条共用；失败抛错由调用方展示。
+async function importFilesAsVersions(ctx: CanvasNodeContext, files: File[]): Promise<void> {
+    if (!files.length) return;
+    const urls = await Promise.all(files.map((f) => readImageFile(f)));
+    const m = ctx.node.metadata || {};
+    const versions = (Array.isArray(m.versions) ? (m.versions as PropVersion[]) : []).filter((v) => v && v.image);
+    const prompt = buildPropPrompt(m as PropFields).prompt;
+    const added: PropVersion[] = urls.map((url) => ({ id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() }));
+    const next = [...versions, ...added];
+    const last = added[added.length - 1];
+    const d = await imageDims(last.image);
+    const imgH = Math.min(520, Math.max(200, Math.round((300 * d.h) / d.w)));
+    ctx.updateNode({ width: 300, height: imgH + 30 });
+    ctx.updateMetadata({ versions: next, activeVersionId: last.id, content: last.image, status: "success", generating: false, generateError: undefined });
+}
+
+// 工具条调起系统文件选择框（工具条项无 DOM 插槽，只能动态创建 input）。
+function pickImageFiles(onFiles: (files: File[]) => void): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = true;
+    input.onchange = () => {
+        const files = Array.from(input.files || []);
+        if (files.length) onFiles(files);
+    };
+    input.click();
+}
 
 function PropContent({ ctx }: CanvasNodeContentProps) {
     const m = ctx.node.metadata || {};
@@ -491,21 +520,10 @@ function PropPanel({ ctx, onClose }: CanvasNodePanelProps) {
                         accept="image/*"
                         multiple
                         hidden
-                        onChange={async (e) => {
+                        onChange={(e) => {
                             const files = Array.from(e.target.files || []);
                             e.target.value = "";
-                            if (!files.length) return;
-                            try {
-                                const urls = await Promise.all(files.map((f) => readImageFile(f)));
-                                const prompt = buildPropPrompt(m as PropFields).prompt;
-                                const added: PropVersion[] = urls.map((url) => ({ id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() }));
-                                const next = [...versions, ...added];
-                                const last = added[added.length - 1];
-                                await fitNode(last.image);
-                                set({ versions: next, activeVersionId: last.id, content: last.image, status: "success", generating: false, generateError: undefined });
-                            } catch (err) {
-                                setError(err instanceof Error ? err.message : String(err));
-                            }
+                            importFilesAsVersions(ctx, files).catch((err) => setError(err instanceof Error ? err.message : String(err)));
                         }}
                     />
                 </label>
@@ -573,6 +591,17 @@ export default definePlugin({
                         const num = list.findIndex((v) => v === current) + 1 || list.length;
                         const filename = `${((typeof meta.name === "string" && meta.name) || "道具").replace(/[\\/:*?"<>|]/g, "_")}-v${num}.png`;
                         downloadImage(url, filename).catch((e) => console.error("[prop] download failed", e));
+                    },
+                },
+                {
+                    id: "import",
+                    title: "导入图片新增版本",
+                    label: "导入",
+                    icon: "📥",
+                    onClick: () => {
+                        pickImageFiles((files) => {
+                            importFilesAsVersions(ctx, files).catch((e) => ctx.updateMetadata({ generateError: e instanceof Error ? e.message : String(e) }));
+                        });
                     },
                 },
             ],
