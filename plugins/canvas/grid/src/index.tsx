@@ -315,6 +315,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
         set({ model: v || undefined });
     };
     const [error, setError] = useState("");
+    const [showPicker, setShowPicker] = useState(false);
     // 模型下拉只保留 nano-2 / nano-pro / image 系列；无命中时回退全量，避免空下拉卡死。
     const MODEL_ALLOW = ["nano-2", "nano-pro", "image"];
     const allModels = ctx.ai.listModels("image");
@@ -462,27 +463,49 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 </div>
             </FieldGroup>
             <FieldGroup title="角色（统一传入）" theme={ctx.theme}>
-                {charNodes.length ? (
-                    charNodes.map((n) => {
-                        const joined = normalizeCastIds(m).includes(n.id);
-                        return (
-                            <div key={n.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                                <span style={{ fontSize: 13 }}>👤 {n.title}</span>
-                                {joined ? (
-                                    <button type="button" onClick={() => removeCast(n.id)} style={{ ...btn, padding: "4px 10px", fontSize: 12 }}>
-                                        移除
-                                    </button>
+                {(() => {
+                    const ids = normalizeCastIds(m);
+                    const snaps = normalizeCastNames(m);
+                    const joined = ids.map((id, i) => {
+                        const n = charNodes.find((x) => x.id === id);
+                        return { id, name: n?.title || snaps[i] || id };
+                    });
+                    const rest = charNodes.filter((n) => !ids.includes(n.id));
+                    return (
+                        <>
+                            {joined.length ? (
+                                joined.map((j) => (
+                                    <div key={j.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                        <span style={{ fontSize: 13 }}>👤 {j.name}</span>
+                                        <button type="button" onClick={() => removeCast(j.id)} style={{ ...btn, padding: "4px 10px", fontSize: 12 }}>
+                                            移除
+                                        </button>
+                                    </div>
+                                ))
+                            ) : (
+                                <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>尚未加入角色</div>
+                            )}
+                            <button type="button" onClick={() => setShowPicker((v) => !v)} style={{ ...btn, alignSelf: "flex-start" }}>
+                                {showPicker ? "收起" : "添加"}
+                            </button>
+                            {showPicker &&
+                                (rest.length ? (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflow: "auto", padding: 8, borderRadius: 8, background: ctx.theme.node.fill }}>
+                                        {rest.map((n) => (
+                                            <div key={n.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                                <span style={{ fontSize: 13 }}>👤 {n.title}</span>
+                                                <button type="button" onClick={() => addCast(n)} style={{ ...btn, padding: "4px 10px", fontSize: 12 }}>
+                                                    加入
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
                                 ) : (
-                                    <button type="button" onClick={() => addCast(n)} style={{ ...btn, padding: "4px 10px", fontSize: 12 }}>
-                                        加入
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })
-                ) : (
-                    <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>画布上暂无角色节点</div>
-                )}
+                                    <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>画布上暂无更多角色节点</div>
+                                ))}
+                        </>
+                    );
+                })()}
             </FieldGroup>
             <FieldGroup title="调度文档" theme={ctx.theme}>
                 <textarea value={(m.doc as string) || ""} onChange={(e) => set({ doc: e.target.value })} rows={6} placeholder={"格1：苏近景，用图片1\n格2：（空）"} style={{ ...input, resize: "vertical" }} />
