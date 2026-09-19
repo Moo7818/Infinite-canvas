@@ -4,7 +4,7 @@ import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
 import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import type { ReactNode } from "react";
 
-export const PROMPT_PREFIX = "2*2四宫格拼图，按调度文档一次生成四帧静帧。";
+export const PROMPT_PREFIX = "2*2四宫格人物调度图，非分镜拼图：同一固定机位一次生成四帧人物调度静帧，按调度文档执行。";
 // 机位锁定：不可编辑，作用于全部四格。
 export const LOCKED_CAMERA = "固定机位空间斜上方45度俯拍，广角，光线自然，照片级写实，电影级光影";
 
@@ -12,15 +12,10 @@ export type GridFields = {
     name?: string;
     castIds?: string[]; // 统一传入：勾选的角色节点 id（有序）
     castNames?: string[]; // 快照：与 castIds 对位，节点被删后仍可显示名
-    cellStates?: string[]; // 四格状态描述
     spaceId?: string;
     spaceName?: string; // 快照
-    style?: string;
     doc?: string;
 };
-
-export const CUSTOM_MAX_LEN = 20;
-export const STYLE_PRESETS = ["影视写实摄影", "3D皮克斯卡通", "吉普力动画", "中国风水墨动画"];
 
 export type GridVersion = {
     id: string;
@@ -96,7 +91,7 @@ function collectRefs(characters: GridResolvedCell[], spaceImages: string[]): str
     return out;
 }
 
-export function buildGridPrompt(f: { name?: string; camera?: string; style?: string; doc?: string; characters: GridResolvedCell[]; spaceName?: string; spaceImages: string[] }): { prompt: string; references: string[] } {
+export function buildGridPrompt(f: { name?: string; doc?: string; characters: GridResolvedCell[]; spaceName?: string; spaceImages: string[] }): { prompt: string; references: string[] } {
     const references = collectRefs(f.characters, f.spaceImages || []);
     const pos = (img: string) => references.indexOf(img) + 1;
     const mark = (imgs: string[]) => (imgs.length ? `（图片${imgs.map(pos).join("、")}）` : "");
@@ -114,7 +109,6 @@ export function buildGridPrompt(f: { name?: string; camera?: string; style?: str
     parts.push(`各宫格机位统一：${LOCKED_CAMERA}。`);
     const docText = f.doc?.trim() || "";
     if (docText) parts.push(`调度：${docText}${/[。？！？!]$/.test(docText) ? "" : "。"}`);
-    if (f.style?.trim()) parts.push(`风格：${f.style.trim()}。`);
     return { prompt: parts.join(""), references };
 }
 
@@ -136,7 +130,7 @@ export function buildDispatchDraft(characters: GridResolvedCell[], spaceName: st
 
 function filledCount(m: CanvasNodeMetadata, cast: GridCast): number {
     const r = m as Record<string, unknown>;
-    const textKeys = ["name", "style", "doc"];
+    const textKeys = ["name", "doc"];
     const textCount = textKeys.filter((k) => {
         const v = r[k];
         return v !== undefined && v !== null && String(v).trim() !== "";
@@ -235,7 +229,7 @@ function GridContent({ ctx }: CanvasNodeContentProps) {
                 </div>
             )}
             <div style={{ padding: "6px 12px", fontSize: 12, color: ctx.theme.node.muted, borderTop: `1px solid ${ctx.theme.node.stroke}` }}>
-                {(m.name as string) || "未命名调度"} · 已填 {count}/5{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
+                {(m.name as string) || "未命名调度"} · 已填 {count}/4{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
                 {typeof m.generateError === "string" && m.generateError ? <span title={m.generateError} style={{ color: "#ef4444" }}> · 上次失败</span> : null}
             </div>
             {Boolean(m.previewOpen) && result !== "" && (
@@ -261,37 +255,6 @@ function FieldGroup({ title, children, theme }: { title: string; children: React
             </div>
             {children}
         </div>
-    );
-}
-
-// 预制下拉 + 自定义：与模型选择器同款样式；自定义最多 CUSTOM_MAX_LEN 字。
-function PresetSelect({ value, presets, placeholder, onChange, style }: { value: string; presets: string[]; placeholder: string; onChange: (v: string | undefined) => void; style: Record<string, string | number> }) {
-    const [custom, setCustom] = useState(false);
-    const showCustom = custom || (value !== "" && !presets.includes(value));
-    return (
-        <>
-            <select
-                value={showCustom ? "__custom" : value}
-                onChange={(e) => {
-                    if (e.target.value === "__custom") {
-                        setCustom(true);
-                    } else {
-                        setCustom(false);
-                        onChange(e.target.value || undefined);
-                    }
-                }}
-                style={style}
-            >
-                <option value="">未选择</option>
-                {presets.map((s) => (
-                    <option key={s} value={s}>
-                        {s}
-                    </option>
-                ))}
-                <option value="__custom">自定义…</option>
-            </select>
-            {showCustom && <input value={presets.includes(value) ? "" : value} maxLength={CUSTOM_MAX_LEN} onChange={(e) => onChange(e.target.value || undefined)} placeholder={placeholder} style={{ ...style, marginTop: 6, fontWeight: 400 }} />}
-        </>
     );
 }
 
@@ -456,10 +419,6 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                         统一机位 <span style={{ fontSize: 11, fontWeight: 400, color: ctx.theme.node.muted }}>（锁定不可编辑）</span>
                     </div>
                     <div style={{ fontSize: 12, lineHeight: 1.6, padding: "8px 10px", borderRadius: 8, background: ctx.theme.node.fill }}>{LOCKED_CAMERA}</div>
-                </div>
-                <div>
-                    <div style={{ ...lab, marginBottom: 4 }}>风格</div>
-                    <PresetSelect value={(m.style as string) || ""} presets={STYLE_PRESETS} placeholder="自定义风格，最多20字" onChange={(v) => set({ style: v })} style={{ ...select, marginTop: 0 }} />
                 </div>
             </FieldGroup>
             <FieldGroup title="角色（统一传入）" theme={ctx.theme}>
