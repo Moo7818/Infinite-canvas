@@ -326,7 +326,6 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const btn = { padding: "6px 14px", borderRadius: 8, border: `1px solid ${ctx.theme.node.stroke}`, background: ctx.theme.toolbar.panel, color: ctx.theme.node.text, cursor: "pointer", fontSize: 13 } as const;
     const versions = (Array.isArray(m.versions) ? (m.versions as CharacterVersion[]) : []).filter((v) => v && v.image);
     const activeId = versions.some((v) => v.id === m.activeVersionId) ? (m.activeVersionId as string) : versions[versions.length - 1]?.id;
-    const vNum = versions.findIndex((v) => v.id === activeId) + 1 || versions.length;
 
     // 节点宽高自适应图片比例：宽固定 300，图高按比例换算后夹紧，+30 留给底部状态条。
     const fitNode = async (url: string) => {
@@ -499,15 +498,6 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 ) : (
                     <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>生成后自动保存版本，点击切换，× 删除</div>
                 )}
-                {versions.length > 0 && (
-                    <button
-                        type="button"
-                        onClick={() => downloadImage(activeImage(m), `${((m.name as string) || "角色").replace(/[\\/:*?"<>|]/g, "_")}-v${vNum}.png`).catch((e) => setError(e instanceof Error ? e.message : String(e)))}
-                        style={{ ...btn, alignSelf: "flex-start" }}
-                    >
-                        下载选中版本
-                    </button>
-                )}
             </FieldGroup>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <select value={model} onChange={(e) => pickModel(e.target.value)} style={{ ...select, flex: 1 }}>
@@ -557,6 +547,24 @@ export default definePlugin({
             },
             Content: CharacterContent,
             Panel: CharacterPanel,
+            toolbar: (ctx) => [
+                {
+                    id: "download",
+                    title: "下载选中版本",
+                    label: "下载",
+                    icon: "⬇️",
+                    onClick: () => {
+                        const meta = ctx.node.metadata || {};
+                        const list = (Array.isArray(meta.versions) ? (meta.versions as CharacterVersion[]) : []).filter((v) => v && v.image);
+                        const current = list.find((v) => v.id === meta.activeVersionId) || list[list.length - 1];
+                        const url = current?.image || (typeof meta.content === "string" ? meta.content : "");
+                        if (!url) return;
+                        const num = list.findIndex((v) => v === current) + 1 || list.length;
+                        const filename = `${((typeof meta.name === "string" && meta.name) || "角色").replace(/[\\/:*?"<>|]/g, "_")}-v${num}.png`;
+                        downloadImage(url, filename).catch((e) => console.error("[character] download failed", e));
+                    },
+                },
+            ],
             onDoubleClick: (ctx) => {
                 if (!activeImage(ctx.node.metadata || {})) return false;
                 ctx.updateMetadata({ previewOpen: true });

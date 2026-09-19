@@ -3302,6 +3302,19 @@ function InfiniteCanvasPage() {
                         canCaptureVideoFrame={contextMenuNode?.type === CanvasNodeType.Video && Boolean(contextMenuNode.metadata?.content)}
                         canGroup={contextMenu.type === "node" && canGroupSelection}
                         canUngroup={contextMenu.type === "node" && canUngroupSelection}
+                        pluginItems={
+                            contextMenu.type === "node" && contextMenuNode
+                                ? buildNodeToolbarItems(contextMenuNode).map((item) => ({
+                                      id: item.id,
+                                      label: item.label,
+                                      icon: item.icon,
+                                      onClick: () => {
+                                          item.onClick();
+                                          setContextMenu(null);
+                                      },
+                                  }))
+                                : undefined
+                        }
                         onClose={() => setContextMenu(null)}
                         onCaptureVideoFrame={(position) => {
                             if (contextMenu.type !== "node") return;
