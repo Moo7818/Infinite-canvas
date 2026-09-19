@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 
 export const PROMPT_PREFIX = "2*2四宫格拼图，按调度文档一次生成四帧静帧。";
 // 机位锁定：不可编辑，作用于全部四格。
-export const LOCKED_CAMERA = "固定机位从空间角落斜上方45度俯拍";
+export const LOCKED_CAMERA = "固定机位空间斜上方45度俯拍，广角，光线自然，照片级写实，电影级光影";
 
 export type GridFields = {
     name?: string;
@@ -111,7 +111,7 @@ export function buildGridPrompt(f: { name?: string; camera?: string; style?: str
     if (f.spaceName?.trim() || (f.spaceImages || []).length) {
         parts.push(`空间：${f.spaceName?.trim() || ""}${mark(f.spaceImages || [])}。`);
     }
-    parts.push(`统一机位：${LOCKED_CAMERA}。`);
+    parts.push(`各宫格机位统一：${LOCKED_CAMERA}。`);
     const docText = f.doc?.trim() || "";
     if (docText) parts.push(`调度：${docText}${/[。？！？!]$/.test(docText) ? "" : "。"}`);
     if (f.style?.trim()) parts.push(`风格：${f.style.trim()}。`);
