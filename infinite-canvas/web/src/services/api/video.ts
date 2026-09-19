@@ -105,7 +105,7 @@ async function createPluginVideoTask(config: AiConfig, model: string, script: st
             images: refs,
             videos,
             audios,
-            params: {
+            params: { ...(config.customParams || {}),
                 seconds: normalizeVideoSeconds(config.videoSeconds),
                 size: normalizeVideoSize(config.size, config.vquality),
                 resolution: normalizeVideoResolution(config.vquality),

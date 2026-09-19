@@ -9,6 +9,8 @@
 |------|------|
 | [架构设计](./architecture.md) | 分层、目录映射、画布引擎、Agent/插件、数据流 |
 | [技术栈](./tech-stack.md) | 前端/Agent/代理/文档站/持久化/构建 |
+| [功能：动态模型参数 schema](./feature-model-param-schema.md) | 渠道模型自定义参数（customParams）动态渲染节点参数选择器 |
+| [项目背景：人机共创视频工厂](./project-background.md) | 全流程人机共创目标、资产统一模型、阶段化UI+终局画布+opencode编排 |
 | [产品设计](./product-design.md) | 定位、核心链路、亮点与不足 |
 | [二次开发路线](./roadmap.md) | 方向与待办 |
 | [Git 分支策略](./git-branch-strategy.md) | 双层目录 vendor copy 管理、上游同步、发版 |

@@ -1,0 +1,178 @@
+{
+  "app": "infinite-canvas",
+  "version": 1,
+  "exportedAt": "2026-08-31T00:00:00.000Z",
+  "config": {
+    "channelMode": "local",
+    "baseUrl": "https://grsaiapi.com",
+    "apiKey": "",
+    "apiFormat": "openai",
+    "channels": [
+      {
+        "id": "grsai",
+        "name": "GrsAI",
+        "baseUrl": "https://grsaiapi.com",
+        "apiKey": "",
+        "apiFormat": "openai",
+        "models": [
+          {
+            "name": "gpt-image-2",
+            "capability": "image",
+            "customParams": [
+              {
+                "key": "aspectRatio",
+                "label": "比例",
+                "type": "select",
+                "options": ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9", "9:21", "1:2", "2:1"]
+              }
+            ],
+            "script": "const body={model,prompt,images:images||[],aspectRatio:String(params.aspectRatio||\"auto\")};const data=await request({method:\"post\",url:\"/api/generate\",headers:{\"Content-Type\":\"application/json\",Authorization:\"Bearer \"+apiKey},data:body});if(data.status===\"succeeded\"&&(data.results||[]).length){const urls=data.results.map(o=>o.url).filter(Boolean);if(urls.length)return urls;}if(data.status===\"running\"&&data.id){try{return await poll(()=>request({method:\"get\",url:\"/api/generate/query?id=\"+encodeURIComponent(data.id),headers:{Authorization:\"Bearer \"+apiKey}}),s=>s.status===\"succeeded\"?(s.results||[]).map(o=>o.url).filter(Boolean):null,{intervalMs:5000,timeoutMs:1200000});}catch(e){if(String(e.message||\"\").includes(\"404\"))throw new Error(\"异步查询端点未配置，请用 replyType=json 同步模式\");throw e;}}throw new Error(data.error||\"生成失败:status=\"+data.status);"
+          },
+          {
+            "name": "nano-banana",
+            "capability": "image",
+            "customParams": [
+              {
+                "key": "aspectRatio",
+                "label": "比例",
+                "type": "select",
+                "options": ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9"]
+              },
+              {
+                "key": "imageSize",
+                "label": "分辨率",
+                "type": "select",
+                "options": ["1K", "2K", "4K"]
+              }
+            ],
+            "script": "const body={model,prompt,images:images||[],aspectRatio:String(params.aspectRatio||\"auto\"),imageSize:String(params.imageSize||\"1K\")};const data=await request({method:\"post\",url:\"/api/generate\",headers:{\"Content-Type\":\"application/json\",Authorization:\"Bearer \"+apiKey},data:body});if(data.status===\"succeeded\"&&(data.results||[]).length){const urls=data.results.map(o=>o.url).filter(Boolean);if(urls.length)return urls;}if(data.status===\"running\"&&data.id){try{return await poll(()=>request({method:\"get\",url:\"/api/generate/query?id=\"+encodeURIComponent(data.id),headers:{Authorization:\"Bearer \"+apiKey}}),s=>s.status===\"succeeded\"?(s.results||[]).map(o=>o.url).filter(Boolean):null,{intervalMs:5000,timeoutMs:1200000});}catch(e){if(String(e.message||\"\").includes(\"404\"))throw new Error(\"异步查询端点未配置，请用 replyType=json 同步模式\");throw e;}}throw new Error(data.error||\"生成失败:status=\"+data.status);"
+          },
+          {
+            "name": "nano-banana-2",
+            "capability": "image",
+            "customParams": [
+              {
+                "key": "aspectRatio",
+                "label": "比例",
+                "type": "select",
+                "options": ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9", "1:4", "4:1", "1:8", "8:1"]
+              },
+              {
+                "key": "imageSize",
+                "label": "分辨率",
+                "type": "select",
+                "options": ["1K", "2K", "4K"]
+              }
+            ],
+            "script": "const body={model,prompt,images:images||[],aspectRatio:String(params.aspectRatio||\"auto\"),imageSize:String(params.imageSize||\"1K\")};const data=await request({method:\"post\",url:\"/api/generate\",headers:{\"Content-Type\":\"application/json\",Authorization:\"Bearer \"+apiKey},data:body});if(data.status===\"succeeded\"&&(data.results||[]).length){const urls=data.results.map(o=>o.url).filter(Boolean);if(urls.length)return urls;}if(data.status===\"running\"&&data.id){try{return await poll(()=>request({method:\"get\",url:\"/api/generate/query?id=\"+encodeURIComponent(data.id),headers:{Authorization:\"Bearer \"+apiKey}}),s=>s.status===\"succeeded\"?(s.results||[]).map(o=>o.url).filter(Boolean):null,{intervalMs:5000,timeoutMs:1200000});}catch(e){if(String(e.message||\"\").includes(\"404\"))throw new Error(\"异步查询端点未配置，请用 replyType=json 同步模式\");throw e;}}throw new Error(data.error||\"生成失败:status=\"+data.status);"
+          },
+          {
+            "name": "nano-banana-pro",
+            "capability": "image",
+            "customParams": [
+              {
+                "key": "aspectRatio",
+                "label": "比例",
+                "type": "select",
+                "options": ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9"]
+              },
+              {
+                "key": "imageSize",
+                "label": "分辨率",
+                "type": "select",
+                "options": ["1K", "2K", "4K"]
+              }
+            ],
+            "script": "const body={model,prompt,images:images||[],aspectRatio:String(params.aspectRatio||\"auto\"),imageSize:String(params.imageSize||\"1K\")};const data=await request({method:\"post\",url:\"/api/generate\",headers:{\"Content-Type\":\"application/json\",Authorization:\"Bearer \"+apiKey},data:body});if(data.status===\"succeeded\"&&(data.results||[]).length){const urls=data.results.map(o=>o.url).filter(Boolean);if(urls.length)return urls;}if(data.status===\"running\"&&data.id){try{return await poll(()=>request({method:\"get\",url:\"/api/generate/query?id=\"+encodeURIComponent(data.id),headers:{Authorization:\"Bearer \"+apiKey}}),s=>s.status===\"succeeded\"?(s.results||[]).map(o=>o.url).filter(Boolean):null,{intervalMs:5000,timeoutMs:1200000});}catch(e){if(String(e.message||\"\").includes(\"404\"))throw new Error(\"异步查询端点未配置，请用 replyType=json 同步模式\");throw e;}}throw new Error(data.error||\"生成失败:status=\"+data.status);"
+          },
+          {
+            "name": "gpt-image-2-vip",
+            "capability": "image",
+            "customParams": [
+              {
+                "key": "aspectRatio",
+                "label": "比例",
+                "type": "select",
+                "options": ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9", "9:21", "1:2", "2:1"]
+              },
+              {
+                "key": "resolution",
+                "label": "分辨率",
+                "type": "select",
+                "options": ["1K", "2K", "4K"]
+              }
+            ],
+            "script": "const VIP_PIXELS={\"1:1\":[\"1024x1024\",\"2048x2048\",\"2880x2880\"],\"16:9\":[\"1280x720\",\"2048x1152\",\"3840x2160\"],\"9:16\":[\"720x1280\",\"1152x2048\",\"2160x3840\"],\"4:3\":[\"1152x864\",\"2304x1728\",\"3264x2448\"],\"3:4\":[\"864x1152\",\"1728x2304\",\"2448x3264\"],\"3:2\":[\"1536x1024\",\"2048x1360\",\"3504x2336\"],\"2:3\":[\"1024x1536\",\"1360x2048\",\"2336x3504\"],\"5:4\":[\"1120x896\",\"2240x1792\",\"3200x2560\"],\"4:5\":[\"896x1120\",\"1792x2240\",\"2560x3200\"],\"21:9\":[\"1456x624\",\"2912x1248\",\"3840x1648\"],\"9:21\":[\"624x1456\",\"1248x2912\",\"1648x3840\"],\"1:2\":[\"768x1536\",\"1536x3072\",\"1920x3840\"],\"2:1\":[\"1536x768\",\"3072x1536\",\"3840x1920\"]};const RES_INDEX={\"1K\":0,\"2K\":1,\"4K\":2};const ratio=String(params.aspectRatio||\"auto\");const pixels=(VIP_PIXELS[ratio]||[])[RES_INDEX[String(params.resolution||\"2K\")]||1]||\"2048x2048\";const body={model,prompt,images:images||[],aspectRatio:pixels};const data=await request({method:\"post\",url:\"/api/generate\",headers:{\"Content-Type\":\"application/json\",Authorization:\"Bearer \"+apiKey},data:body});if(data.status===\"succeeded\"&&(data.results||[]).length){const urls=data.results.map(o=>o.url).filter(Boolean);if(urls.length)return urls;}if(data.status===\"running\"&&data.id){try{return await poll(()=>request({method:\"get\",url:\"/api/generate/query?id=\"+encodeURIComponent(data.id),headers:{Authorization:\"Bearer \"+apiKey}}),s=>s.status===\"succeeded\"?(s.results||[]).map(o=>o.url).filter(Boolean):null,{intervalMs:5000,timeoutMs:1200000});}catch(e){if(String(e.message||\"\").includes(\"404\"))throw new Error(\"异步查询端点未配置，请用 replyType=json 同步模式\");throw e;}}throw new Error(data.error||\"生成失败:status=\"+data.status);"
+          }
+        ]
+      },
+      {
+        "id": "default",
+        "name": "OpenAI",
+        "baseUrl": "https://api.openai.com",
+        "apiKey": "",
+        "apiFormat": "openai",
+        "models": [
+          { "name": "gpt-image-2", "capability": "image" },
+          { "name": "grok-imagine-video", "capability": "video" },
+          { "name": "gpt-5.5", "capability": "text" },
+          { "name": "gpt-4o-mini-tts", "capability": "audio" }
+        ]
+      }
+    ],
+    "model": "grsai::gpt-image-2",
+    "imageModel": "grsai::gpt-image-2",
+    "videoModel": "default::grok-imagine-video",
+    "textModel": "default::gpt-5.5",
+    "audioModel": "default::gpt-4o-mini-tts",
+    "audioVoice": "alloy",
+    "audioFormat": "mp3",
+    "audioSpeed": "1",
+    "audioInstructions": "",
+    "videoSeconds": "6",
+    "vquality": "720",
+    "videoGenerateAudio": "true",
+    "videoWatermark": "false",
+    "systemPrompt": "",
+    "reasoningEffort": "auto",
+    "models": [
+      "grsai::gpt-image-2",
+      "grsai::nano-banana",
+      "grsai::nano-banana-2",
+      "grsai::nano-banana-pro",
+      "grsai::gpt-image-2-vip",
+      "default::gpt-image-2",
+      "default::grok-imagine-video",
+      "default::gpt-5.5",
+      "default::gpt-4o-mini-tts"
+    ],
+    "quality": "auto",
+    "size": "1:1",
+    "background": "",
+    "count": "1",
+    "canvasImageCount": "1",
+    "customParams": {}
+  },
+  "webdav": {
+    "url": "",
+    "username": "",
+    "password": "",
+    "directory": "infinite-canvas",
+    "lastSyncedAt": ""
+  },
+  "promptSources": {
+    "sources": [
+      { "id": "banana-prompt-quicker", "name": "Banana Prompt Quicker", "url": "https://raw.githubusercontent.com/yukkcat/image-prompts/main/dist/sources/banana-prompt-quicker.json", "homepage": "https://glidea.github.io/banana-prompt-quicker/", "enabled": true, "builtIn": true },
+      { "id": "davidwu-gpt-image2-prompts", "name": "DavidWu GPT Image 2", "url": "https://raw.githubusercontent.com/yukkcat/image-prompts/main/dist/sources/davidwu-gpt-image2-prompts.json", "homepage": "https://github.com/davidwuw0811-boop/awesome-gpt-image2-prompts", "enabled": true, "builtIn": true },
+      { "id": "freestylefly-gpt-image-2", "name": "Freestylefly GPT Image 2", "url": "https://raw.githubusercontent.com/yukkcat/image-prompts/main/dist/sources/freestylefly-gpt-image-2.json", "homepage": "https://github.com/freestylefly/awesome-gpt-image-2", "enabled": true, "builtIn": true },
+      { "id": "awesome-gpt-image", "name": "Awesome GPT Image", "url": "https://raw.githubusercontent.com/yukkcat/image-prompts/main/dist/sources/awesome-gpt-image.json", "homepage": "https://github.com/ZeroLu/awesome-gpt-image", "enabled": true, "builtIn": true },
+      { "id": "awesome-gpt4o-image-prompts", "name": "Awesome GPT-4o", "url": "https://raw.githubusercontent.com/yukkcat/image-prompts/main/dist/sources/awesome-gpt4o-image-prompts.json", "homepage": "https://github.com/ImgEdify/Awesome-GPT4o-Image-Prompts", "enabled": true, "builtIn": true },
+      { "id": "youmind-gpt-image-2", "name": "YouMind GPT Image 2", "url": "https://raw.githubusercontent.com/yukkcat/image-prompts/main/dist/sources/youmind-gpt-image-2.json", "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2", "enabled": true, "builtIn": true },
+      { "id": "youmind-nano-banana-pro", "name": "YouMind Nano Banana Pro", "url": "https://raw.githubusercontent.com/yukkcat/image-prompts/main/dist/sources/youmind-nano-banana-pro.json", "homepage": "https://github.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts", "enabled": true, "builtIn": true }
+    ],
+    "schedule": {
+      "intervalMinutes": 30,
+      "lastFetchedAt": ""
+    }
+  }
+}

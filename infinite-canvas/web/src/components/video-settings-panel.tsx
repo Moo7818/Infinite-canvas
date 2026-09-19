@@ -4,9 +4,10 @@ import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
+import { ModelParamsPanel } from "@/components/model-params-panel";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import { clampVideoSeconds, computeVideoSize, inferVideoRatio, parseVideoResolution, readVideoDimensions, VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN, videoRatioOptions } from "@/lib/media-size";
-import { type AiConfig } from "@/stores/use-config-store";
+import { resolveModelCustomParams, type AiConfig } from "@/stores/use-config-store";
 
 const resolutionOptions = [
     { value: "480", label: "480p" },
@@ -25,12 +26,13 @@ export const videoSecondsRange = { min: VIDEO_SECONDS_MIN, max: VIDEO_SECONDS_MA
 type VideoSettingsPanelProps = {
     config: AiConfig;
     onConfigChange: (key: "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoMode", value: string) => void;
+    onCustomParamsChange?: (key: string, value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
 };
 
-export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
+export function VideoSettingsPanel({ config, onConfigChange, onCustomParamsChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
     const { t } = useTranslation();
     const seconds = Number(clampVideoSeconds(config.videoSeconds || "6"));
     const videoMode = normalizeVideoModeValue(config.videoMode);
@@ -100,6 +102,11 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         ))}
                     </div>
                 </SettingGroup>
+                {onCustomParamsChange && resolveModelCustomParams(config, config.model).length ? (
+                    <SettingGroup title={t("settingsPanels.video.customParams")} color={theme.node.muted}>
+                        <ModelParamsPanel config={config} theme={theme} onValueChange={onCustomParamsChange} />
+                    </SettingGroup>
+                ) : null}
             </div>
         </ImageSettingsTheme>
     );
