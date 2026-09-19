@@ -53,4 +53,4 @@ git branch -D product-split
 
   这样 tag 的源码树只含产品层（`web/`、`canvas-agent/`、`plugins/`、`canvas-proxy/` 等），clone/下载 tag 即得干净产品仓。
 * `git describe` 在 main 上不适用于此类 tag，属预期；版本定位以 `infinite-canvas/VERSION` 和 CHANGELOG 为准。
-* v0.18.1 及更早的 tag 打在 main 全树上（历史现状），自下个版本起按本节执行。
+* v0.18.1 已于 2026-09-19 重打为产品树 tag（`31fa4ea`，即 main `a183cde` 的子树）；v0.18.0 及更早为上游历史 tag，保持原样。
