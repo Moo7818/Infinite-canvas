@@ -7,7 +7,6 @@ import type { ReactNode } from "react";
 export const PROMPT_PREFIX = "2*2四宫格拼图，按调度文档一次生成四帧静帧。";
 // 机位锁定：不可编辑，作用于全部四格。
 export const LOCKED_CAMERA = "固定机位从客厅角落斜上方45度俯拍";
-export const GRID_CELLS = 4;
 
 export type GridFields = {
     name?: string;
@@ -51,11 +50,6 @@ function nodeImage(n: CanvasNodeData): string[] {
 function normalizeCastNames(m: CanvasNodeMetadata): string[] {
     const raw = Array.isArray(m.castNames) ? (m.castNames as unknown[]) : [];
     return raw.filter((v): v is string => typeof v === "string");
-}
-
-function normalizeStates(m: CanvasNodeMetadata): string[] {
-    const raw = Array.isArray(m.cellStates) ? (m.cellStates as unknown[]) : [];
-    return [0, 1, 2, 3].map((i) => (typeof raw[i] === "string" ? (raw[i] as string) : ""));
 }
 
 function normalizeCastIds(m: CanvasNodeMetadata): string[] {
@@ -124,7 +118,7 @@ export function buildGridPrompt(f: { name?: string; camera?: string; style?: str
     return { prompt: parts.join(""), references };
 }
 
-// 由统一传入生成调度草稿：出场名单（含编号）+ 四格空位 + 空间行，人再填每格状态。
+// 由统一传入生成调度草稿：出场名单（含编号）+ 空间行；正文格位由人直接写文档，不预设格式。
 export function buildDispatchDraft(characters: GridResolvedCell[], spaceName: string, spaceImages: string[]): string {
     const references = collectRefs(characters, spaceImages);
     const pos = (img: string) => references.indexOf(img) + 1;
@@ -137,7 +131,6 @@ export function buildDispatchDraft(characters: GridResolvedCell[], spaceName: st
     if (spaceName || spaceImages.length) {
         lines.push(`空间：${spaceName}${spaceImages.length ? `（图片${spaceImages.map(pos).join("、")}）` : "（暂无可用图）"}`);
     }
-    for (let i = 1; i <= GRID_CELLS; i++) lines.push(`格${i}：`);
     return lines.join("\n");
 }
 
@@ -150,8 +143,7 @@ function filledCount(m: CanvasNodeMetadata, cast: GridCast): number {
     }).length;
     const spaceCount = cast.spaceName || cast.spaceImages.length ? 1 : 0;
     const castCount = normalizeCastIds(m).length > 0 ? 1 : 0;
-    const stateCount = normalizeStates(m).filter((s) => s.trim() !== "").length;
-    return textCount + spaceCount + castCount + stateCount;
+    return textCount + spaceCount + castCount;
 }
 
 function readImageFile(file: File): Promise<string> {
@@ -243,7 +235,7 @@ function GridContent({ ctx }: CanvasNodeContentProps) {
                 </div>
             )}
             <div style={{ padding: "6px 12px", fontSize: 12, color: ctx.theme.node.muted, borderTop: `1px solid ${ctx.theme.node.stroke}` }}>
-                {(m.name as string) || "未命名调度"} · 已填 {count}/9{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
+                {(m.name as string) || "未命名调度"} · 已填 {count}/5{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
                 {typeof m.generateError === "string" && m.generateError ? <span title={m.generateError} style={{ color: "#ef4444" }}> · 上次失败</span> : null}
             </div>
             {Boolean(m.previewOpen) && result !== "" && (
@@ -343,6 +335,16 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const setName = (name: string) => {
         ctx.updateNode({ title: name.trim() || "宫格调度" });
         set({ name });
+    };
+    const addCast = (n: CanvasNodeData) => {
+        const ids = normalizeCastIds(m);
+        if (ids.includes(n.id)) return;
+        set({ castIds: [...ids, n.id], castNames: [...normalizeCastNames(m).slice(0, ids.length), n.title] });
+    };
+    const removeCast = (id: string) => {
+        const ids = normalizeCastIds(m);
+        const idx = ids.indexOf(id);
+        set({ castIds: ids.filter((x) => x !== id), castNames: normalizeCastNames(m).filter((_, j) => j !== idx) });
     };
 
     const input = { width: "100%", boxSizing: "border-box" as const, padding: "6px 10px", borderRadius: 8, border: `1px solid ${ctx.theme.node.stroke}`, background: "transparent", color: ctx.theme.node.text, fontSize: 13, outline: "none" };
@@ -462,46 +464,25 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
             <FieldGroup title="角色（统一传入）" theme={ctx.theme}>
                 {charNodes.length ? (
                     charNodes.map((n) => {
-                        const ids = normalizeCastIds(m);
-                        const checked = ids.includes(n.id);
+                        const joined = normalizeCastIds(m).includes(n.id);
                         return (
-                            <label key={n.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                                <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => {
-                                        if (checked) {
-                                            const idx = ids.indexOf(n.id);
-                                            set({ castIds: ids.filter((id) => id !== n.id), castNames: normalizeCastNames(m).filter((_, j) => j !== idx) });
-                                        } else {
-                                            set({ castIds: [...ids, n.id], castNames: [...normalizeCastNames(m).slice(0, ids.length), n.title] });
-                                        }
-                                    }}
-                                />
-                                {n.title}
-                            </label>
+                            <div key={n.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                <span style={{ fontSize: 13 }}>👤 {n.title}</span>
+                                {joined ? (
+                                    <button type="button" onClick={() => removeCast(n.id)} style={{ ...btn, padding: "4px 10px", fontSize: 12 }}>
+                                        移除
+                                    </button>
+                                ) : (
+                                    <button type="button" onClick={() => addCast(n)} style={{ ...btn, padding: "4px 10px", fontSize: 12 }}>
+                                        加入
+                                    </button>
+                                )}
+                            </div>
                         );
                     })
                 ) : (
                     <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>画布上暂无角色节点</div>
                 )}
-            </FieldGroup>
-            <FieldGroup title="四格状态" theme={ctx.theme}>
-                {normalizeStates(m).map((s, i) => (
-                    <div key={i}>
-                        <div style={{ ...lab, marginBottom: 4 }}>格{i + 1}</div>
-                        <input
-                            value={s}
-                            onChange={(e) => {
-                                const next = normalizeStates(m);
-                                next[i] = e.target.value;
-                                set({ cellStates: next });
-                            }}
-                            placeholder={`格${i + 1}状态，如：苏近景`}
-                            style={{ ...input, marginTop: 0, fontWeight: 400 }}
-                        />
-                    </div>
-                ))}
             </FieldGroup>
             <FieldGroup title="调度文档" theme={ctx.theme}>
                 <textarea value={(m.doc as string) || ""} onChange={(e) => set({ doc: e.target.value })} rows={6} placeholder={"格1：苏近景，用图片1\n格2：（空）"} style={{ ...input, resize: "vertical" }} />
