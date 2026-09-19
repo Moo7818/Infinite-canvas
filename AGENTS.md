@@ -25,6 +25,7 @@
 | 插件开发指南 | `docs/plugin-dev-guide.md:1` |
 | Agent 团队 | `.opencode/agents/lead.md:1`（主智能体，宪法即本文），`.opencode/agents/git-keeper.md:1`，`.opencode/agents/plugin-dev.md:1` |
 | 上游功能/部署指路 | `docs/upstream-summary.md:1`（只索引，不复制原文） |
+| Grsai 渠道集成 | `docs/grsai-integration.md:1`（接口行为/三故障判定） |
 | 文档总览索引 | `docs/index.md:1`（唯一不沉底的全量索引） |
 
 ## 约束

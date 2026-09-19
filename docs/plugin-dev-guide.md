@@ -55,3 +55,17 @@
 * 需生成能力直接调 `ctx.ai`，不自接接口；`system` 提示词插件自拼。
 * 安全：远端源码即不可信；`dangerouslySetInnerHTML` 仅用于可信内容，HTML 类走沙箱 iframe；`setup` 返回 cleanup；事件名加插件前缀。
 * 每插件独立 `feature/plugin-<id>` 分支，模板自带 `typecheck`；`CHANGELOG Unreleased` 一句话。
+
+## 8 实战沉淀（四自研插件：character/scene/prop/grid）
+
+* **metadata 命名空间**：新字段带插件前缀（如 `sceneTime`），`name/model/versions/content` 等通用键与宿主混居，未来撞车风险由本约定规避；`content` 作通用输出位是有意的，保留。
+* **错误分类**：现状靠消息正则（脆弱且 locale 相关）；目标是宿主 `readAxiosError` 保留 `error.code`（`ERR_NETWORK/ECONNABORTED/ERR_CANCELED`），插件判 `error.code`。需宿主支持，见 roadmap。
+* **读改写竞态**：`ctx.node` 是渲染快照，`versions` 追加存在后完成者覆盖风险；现状靠单 flight 互斥兜底，目标是宿主 `updateMetadata` 函数式重载。见 roadmap。
+* **生成态三件套**：内存互斥 Map（同步检查占用）+ `metadata.generating` 持久 + 刷新中断显式标记（真续跑需 taskId 落盘，见 roadmap）；取消走模块级 `AbortController`。
+* **版本存储**：dataURL 全量进 metadata 会膨胀（2K 单张 5–10MB）；目标是宿主暴露 `storeImage`，metadata 只存 key。见 roadmap。
+* **MODEL_ALLOW**：硬编码是临时方案；目标是放开全量或存 metadata 由用户勾选。见 roadmap。
+* **脚本超时**：`http` helper 不支持 timeout（见 minimax 脚本改用 `request` 的先例）；生图脚本建任务步同样切 `request({..., timeout: 30000})`，早失败早提示。见 roadmap。
+* **幂等头**：POST 带 `X-Request-Id`，上游未承诺也无害，并作为推动其支持幂等键的依据。
+* **双重标注**：宿主 `requestEdit` 会给 prompt 加"参考图片编号…"前缀，与插件自拼的"（环境参考图片1、2）"语义一致（`toReferences` 保序），仅冗余，无冲突。
+* **构建取证**：`build.mjs` 开 `keepNames`（`{ esbuild: { keepNames: true } }`），dev key 告警直接可读；`definePlugin` 的 version 是运行时唯一 fresh 信号，修完即升 patch。
+* **共享代码方向**：四插件约 80% 重复（ImagesField/PresetSelect/版本条/防重样板等），目标抽 `plugins/canvas/shared`，三 Panel 演进为 schema 驱动单实现。见 roadmap。
