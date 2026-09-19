@@ -38,6 +38,9 @@ export type CanvasNodeToolbarItem = {
     danger?: boolean;
 };
 
+// Metadata patch: object merge, or an updater receiving the latest metadata (for concurrent read-modify-write).
+export type MetadataPatch = CanvasNodeMetadata | ((prev: CanvasNodeMetadata) => CanvasNodeMetadata);
+
 // Context injected while rendering each node; the primary interface between plugins and the canvas.
 export type CanvasNodeContext = {
     node: CanvasNodeData;
@@ -45,7 +48,7 @@ export type CanvasNodeContext = {
     scale: number;
     isSelected: boolean; // Whether this node is selected, used to enable iframe interaction on demand.
     // Node data.
-    updateMetadata: (patch: CanvasNodeMetadata) => void;
+    updateMetadata: (patch: MetadataPatch) => void;
     updateNode: (patch: Partial<Pick<CanvasNodeData, "title" | "width" | "height">>) => void;
     // Graph access.
     getNode: (id: string) => CanvasNodeData | null;
@@ -81,7 +84,7 @@ export type CanvasPluginHost = {
     getUpstream: (nodeId: string) => CanvasNodeData[];
     getDownstream: (nodeId: string) => CanvasNodeData[];
     updateNode: (nodeId: string, patch: Partial<Pick<CanvasNodeData, "title" | "width" | "height">>) => void;
-    updateMetadata: (nodeId: string, patch: CanvasNodeMetadata) => void;
+    updateMetadata: (nodeId: string, patch: MetadataPatch) => void;
     applyOps: (ops: CanvasAgentOp[]) => void;
     // AI generation using the current canvas model and credential configuration.
     ai: CanvasPluginAi;

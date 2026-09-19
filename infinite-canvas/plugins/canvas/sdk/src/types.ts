@@ -215,7 +215,8 @@ export type CanvasNodeContext = {
     theme: CanvasTheme;
     scale: number;
     isSelected: boolean; // 该节点当前是否被选中(用于按需启用 iframe 交互等)
-    updateMetadata: (patch: CanvasNodeMetadata) => void;
+    // 对象合并，或接收最新 metadata 的更新函数(并发读改写用函数式，避免后完成者覆盖)
+    updateMetadata: (patch: CanvasNodeMetadata | ((prev: CanvasNodeMetadata) => CanvasNodeMetadata)) => void;
     updateNode: (patch: Partial<Pick<CanvasNodeData, "title" | "width" | "height">>) => void;
     // 图访问
     getNode: (id: string) => CanvasNodeData | null;

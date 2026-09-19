@@ -1,7 +1,7 @@
 // 场景节点:点击左侧弹出表单 → 拼装提示词 → 参考图生成场景图。
 // 生成结果自动追加版本并写回本节点展示;下游输出当前选中版本图。
-import { definePlugin, useState } from "@infinite-canvas/plugin-sdk";
-import type { CanvasNodeContentProps, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
+import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
+import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import type { ReactNode } from "react";
 
 export const PROMPT_PREFIX = "电影质感实拍场景，超广角全景构图，纯净无人物、无水印，1/4黑柔滤镜，光线柔和均匀。";
@@ -102,6 +102,28 @@ function readImageFile(file: File): Promise<string> {
     });
 }
 
+// 下载选中版本：dataURL 直下；远端 URL 先抓成 blob（跨域失败时抛错提示）。
+async function downloadImage(url: string, filename: string): Promise<void> {
+    let tmp = "";
+    try {
+        let href = url;
+        if (/^https?:\/\//i.test(url)) {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`下载失败（${res.status}）`);
+            tmp = URL.createObjectURL(await res.blob());
+            href = tmp;
+        }
+        const a = document.createElement("a");
+        a.href = href;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    } finally {
+        if (tmp) setTimeout(() => URL.revokeObjectURL(tmp), 5000);
+    }
+}
+
 function imageDims(src: string): Promise<{ w: number; h: number }> {
     return new Promise((resolve) => {
         const img = new Image();
@@ -109,6 +131,40 @@ function imageDims(src: string): Promise<{ w: number; h: number }> {
         img.onerror = () => resolve({ w: 1, h: 1 });
         img.src = src;
     });
+}
+
+// 在途生成的取消器：模块常驻，面板开关不影响；刷新后 Map 为空，靠 generating 残留自愈。
+const runningControllers = new Map<string, AbortController>();
+
+// 导入图片新增版本：面板与工具条共用；失败抛错由调用方展示。
+async function importFilesAsVersions(ctx: CanvasNodeContext, files: File[]): Promise<void> {
+    if (!files.length) return;
+    const urls = await Promise.all(files.map((f) => readImageFile(f)));
+    const m = ctx.node.metadata || {};
+    const prompt = buildScenePrompt(m as SceneFields).prompt;
+    const added: SceneVersion[] = urls.map((url) => ({ id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() }));
+    const last = added[added.length - 1];
+    const d = await imageDims(last.image);
+    const imgH = Math.min(520, Math.max(200, Math.round((300 * d.h) / d.w)));
+    ctx.updateNode({ width: 300, height: imgH + 30 });
+    ctx.updateMetadata((prev) => {
+        const cur = (Array.isArray(prev.versions) ? (prev.versions as SceneVersion[]) : []).filter((v) => v && v.image);
+        const next = [...cur, ...added];
+        return { versions: next, activeVersionId: last.id, content: last.image, status: "success", generating: false, generateError: undefined };
+    });
+}
+
+// 工具条调起系统文件选择框（工具条项无 DOM 插槽，只能动态创建 input）。
+function pickImageFiles(onFiles: (files: File[]) => void): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = true;
+    input.onchange = () => {
+        const files = Array.from(input.files || []);
+        if (files.length) onFiles(files);
+    };
+    input.click();
 }
 
 function SceneContent({ ctx }: CanvasNodeContentProps) {
@@ -129,6 +185,7 @@ function SceneContent({ ctx }: CanvasNodeContentProps) {
             )}
             <div style={{ padding: "6px 12px", fontSize: 12, color: ctx.theme.node.muted, borderTop: `1px solid ${ctx.theme.node.stroke}` }}>
                 {(m.name as string) || "未命名场景"} · 已填 {count}/11{versions.length > 1 ? ` · 版本 ${versions.findIndex((v) => v.id === m.activeVersionId) + 1 || versions.length}/${versions.length}` : ""}
+                {typeof m.generateError === "string" && m.generateError ? <span title={m.generateError} style={{ color: "#ef4444" }}> · 上次失败</span> : null}
             </div>
             {previewOpen && (
                 <div
@@ -159,7 +216,17 @@ function FieldGroup({ title, children, theme }: { title: string; children: React
     );
 }
 
-function ImagesField({ label, values, max, onChange, theme }: { label: string; values: string[]; max: number; onChange: (next: string[]) => void; theme: CanvasNodeContentProps["ctx"]["theme"] }) {
+// 画布图片候选：内置图片节点与三自有节点都把图同步到 metadata.content，直接可读。
+// 快照式：选中时把 URL 拷入字段数组，与上传同流；远端 URL 跨域下不来时宿主侧会报错。
+function nodeImageUrl(n: CanvasNodeData): string | null {
+    const c = n.metadata?.content;
+    if (typeof c === "string" && (c.startsWith("data:image/") || /^https?:\/\//i.test(c))) return c;
+    return null;
+}
+
+function ImagesField({ label, values, max, onChange, candidates, theme }: { label: string; values: string[]; max: number; onChange: (next: string[]) => void; candidates: { id: string; title: string; url: string }[]; theme: CanvasNodeContentProps["ctx"]["theme"] }) {
+    const [picking, setPicking] = useState(false);
+    const fresh = candidates.filter((c) => !values.includes(c.url));
     return (
         <div>
             <div style={{ fontSize: 12, color: theme.node.muted, marginBottom: 4 }}>
@@ -180,24 +247,57 @@ function ImagesField({ label, values, max, onChange, theme }: { label: string; v
                     </div>
                 ))}
                 {values.length < max && (
-                    <label style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${theme.node.stroke}`, background: theme.toolbar.panel, color: theme.node.text, cursor: "pointer", fontSize: 12 }}>
-                        上传
-                        <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            hidden
-                            onChange={async (e) => {
-                                const files = Array.from(e.target.files || []);
-                                e.target.value = "";
-                                if (!files.length) return;
-                                const picked = await Promise.all(files.map((f) => readImageFile(f)));
-                                onChange([...values, ...picked].slice(0, max));
-                            }}
-                        />
-                    </label>
+                    <>
+                        <label style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${theme.node.stroke}`, background: theme.toolbar.panel, color: theme.node.text, cursor: "pointer", fontSize: 12 }}>
+                            上传
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                hidden
+                                onChange={async (e) => {
+                                    const files = Array.from(e.target.files || []);
+                                    e.target.value = "";
+                                    if (!files.length) return;
+                                    const picked = await Promise.all(files.map((f) => readImageFile(f)));
+                                    onChange([...values, ...picked].slice(0, max));
+                                }}
+                            />
+                        </label>
+                        {values.length < max && (
+                            <button
+                                type="button"
+                                onClick={() => setPicking((v) => !v)}
+                                style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${theme.node.stroke}`, background: picking ? theme.node.fill : theme.toolbar.panel, color: theme.node.text, cursor: "pointer", fontSize: 12 }}
+                            >
+                                画布选择
+                            </button>
+                        )}
+                    </>
                 )}
             </div>
+            {picking && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", maxHeight: 132, overflow: "auto", marginTop: 8, padding: 8, borderRadius: 8, background: theme.node.fill }}>
+                    {fresh.length ? (
+                        fresh.map((c) => (
+                            <img
+                                key={c.id}
+                                src={c.url}
+                                alt={c.title}
+                                title={`引用：${c.title}`}
+                                onClick={() => {
+                                    const next = [...values, c.url].slice(0, max);
+                                    onChange(next);
+                                    if (next.length >= max) setPicking(false);
+                                }}
+                                style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8, cursor: "pointer", border: `1px solid ${theme.node.stroke}` }}
+                            />
+                        ))
+                    ) : (
+                        <div style={{ fontSize: 12, color: theme.node.muted }}>画布上暂无更多可用图片</div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -241,10 +341,22 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
         setModel(v);
         set({ model: v || undefined });
     };
-    const [running, setRunning] = useState(false);
+    // 生成态持久化：generating 进 metadata，关面板重开不丢失；在途请求靠模块级取消器接管。
+    const [running, setRunning] = useState(Boolean((ctx.node.metadata || {}).generating));
+    useEffect(() => {
+        // 兜底：generating 为真但本会话无在途请求（刷新/崩溃残留）。
+        // 请求无法续跑（任务 id 随旧页面销毁），标记为中断而不是静默清空，让用户知道发生了什么。
+        if ((ctx.node.metadata || {}).generating && !runningControllers.has(ctx.node.id)) {
+            ctx.updateMetadata({ generating: false, generateError: "页面刷新导致生成中断，后台任务状态未知；如需结果请重新生成。" });
+            setRunning(false);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const [error, setError] = useState("");
-    // 模型下拉只保留 nano-2 / nano-pro / image 系列；无命中时回退全量，避免空下拉卡死。
-    const MODEL_ALLOW = ["nano-2", "nano-pro", "image"];
+    // 模型下拉默认 nano-2 / nano-pro / image 系列；metadata.modelAllow 非空数组可覆盖。
+    const MODEL_BASE = ["nano-2", "nano-pro", "image"];
+    const customAllow = (Array.isArray(m.modelAllow) ? (m.modelAllow as unknown[]) : []).filter((v): v is string => typeof v === "string" && v.length > 0);
+    const MODEL_ALLOW = customAllow.length ? customAllow : MODEL_BASE;
     const allModels = ctx.ai.listModels("image");
     const models = (() => {
         const hit = allModels.filter((o) => {
@@ -254,8 +366,14 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
         return hit.length ? hit : allModels;
     })();
     const preview = buildScenePrompt(m as SceneFields).prompt;
+    const errMsg = error || (typeof m.generateError === "string" ? m.generateError : "");
+    const canvasImages = ctx
+        .getNodes()
+        .filter((n) => n.id !== ctx.node.id)
+        .map((n) => ({ id: n.id, title: n.title, url: nodeImageUrl(n) }))
+        .filter((c): c is { id: string; title: string; url: string } => c.url !== null);
 
-    const set = (patch: CanvasNodeMetadata) => ctx.updateMetadata(patch);
+    const set = (patch: CanvasNodeMetadata | ((prev: CanvasNodeMetadata) => CanvasNodeMetadata)) => ctx.updateMetadata(patch);
     const setName = (name: string) => {
         ctx.updateNode({ title: name.trim() || "场景" });
         set({ name });
@@ -289,28 +407,48 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
         if (next) void fitNode(next.image);
     };
 
+    const cancel = () => runningControllers.get(ctx.node.id)?.abort();
+
     const generate = async () => {
+        // 防重复提交：Map 检查与占用是同步代码，不存在竞态；running/metadata 只做 UI 与跨面板持久。
+        if (runningControllers.has(ctx.node.id)) {
+            console.debug("[scene] 重复提交已拦截");
+            return;
+        }
+        if (running || Boolean((ctx.node.metadata || {}).generating)) return;
+        const controller = new AbortController();
+        runningControllers.set(ctx.node.id, controller);
         setRunning(true);
         setError("");
+        set({ generating: true, generateError: undefined });
         try {
             const { prompt, references } = buildScenePrompt(m as SceneFields);
             const chosen = model || ctx.ai.defaultModel("image");
             // 默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
-            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9" });
+            console.info(`[scene] 提交生成 参考图${references.length}张`);
+            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
             await fitNode(url);
             // 每次生成自动追加为新版本并选中；老节点首次生成时把旧图收为版本 1。
-            const nextVersions = [...versions];
-            if (!nextVersions.length && typeof m.content === "string" && m.content) {
-                nextVersions.push({ id: newVersionId(), image: m.content, prompt: "", createdAt: "" });
-            }
             const ver: SceneVersion = { id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() };
-            nextVersions.push(ver);
-            set({ versions: nextVersions, activeVersionId: ver.id, content: url, status: "success" });
+            // 函数式追加：与工具条导入并发时以前面最新 state 为准，不丢更新。
+            set((prev) => {
+                const cur = (Array.isArray(prev.versions) ? (prev.versions as SceneVersion[]) : []).filter((v) => v && v.image);
+                const base =
+                    !cur.length && typeof prev.content === "string" && prev.content ? [{ id: newVersionId(), image: prev.content, prompt: "", createdAt: "" }, ...cur] : cur;
+                const next = [...base, ver];
+                return { versions: next, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined };
+            });
         } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
+            const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
+            // 连接层失败（无响应）与业务失败要区分：前者任务可能已在后台建成，提示用户不要连点。
+            const msg = /network error|ERR_|Failed to fetch|timeout|ECONN|aborted/i.test(raw) && raw !== "已取消" ? `${raw}（连接中断，后台任务可能仍在执行；请勿连点，稍后手动重试）` : raw;
+            setError(msg);
+            // 错误持久化：面板关闭重开仍可见；节点卡片底部同步红标。
+            set({ generating: false, generateError: msg });
         } finally {
+            runningControllers.delete(ctx.node.id);
             setRunning(false);
         }
     };
@@ -336,7 +474,7 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
                     <div style={{ ...lab, marginBottom: 4 }}>风格</div>
                     <PresetSelect value={(m.style as string) || ""} presets={STYLE_PRESETS} placeholder="自定义风格，最多20字" onChange={(v) => set({ style: v })} style={{ ...select, marginTop: 0 }} />
                 </div>
-                <ImagesField label="风格参考图" values={fieldImages(m.styleImage ? [m.styleImage] : [], STYLE_IMAGE_MAX)} max={STYLE_IMAGE_MAX} theme={ctx.theme} onChange={(next) => set({ styleImage: next[0] })} />
+                <ImagesField label="风格参考图" values={fieldImages(m.styleImage ? [m.styleImage] : [], STYLE_IMAGE_MAX)} max={STYLE_IMAGE_MAX} candidates={canvasImages} theme={ctx.theme} onChange={(next) => set({ styleImage: next[0] })} />
                 <div>
                     <div style={{ ...lab, marginBottom: 4 }}>机位</div>
                     <PresetSelect value={(m.camera as string) || ""} presets={CAMERA_PRESETS} placeholder="自定义机位，最多20字" onChange={(v) => set({ camera: v })} style={{ ...select, marginTop: 0 }} />
@@ -347,21 +485,21 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
                     描述
                     <textarea value={(m.envText as string) || ""} onChange={(e) => set({ envText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
                 </label>
-                <ImagesField label="参考图" values={fieldImages(m.envImages, ENV_MAX)} max={ENV_MAX} theme={ctx.theme} onChange={(next) => set({ envImages: next })} />
+                <ImagesField label="参考图" values={fieldImages(m.envImages, ENV_MAX)} max={ENV_MAX} candidates={canvasImages} theme={ctx.theme} onChange={(next) => set({ envImages: next })} />
             </FieldGroup>
             <FieldGroup title="光影" theme={ctx.theme}>
                 <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
                     描述
                     <textarea value={(m.lightText as string) || ""} onChange={(e) => set({ lightText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
                 </label>
-                <ImagesField label="参考图" values={fieldImages(m.lightImages, LIGHT_MAX)} max={LIGHT_MAX} theme={ctx.theme} onChange={(next) => set({ lightImages: next })} />
+                <ImagesField label="参考图" values={fieldImages(m.lightImages, LIGHT_MAX)} max={LIGHT_MAX} candidates={canvasImages} theme={ctx.theme} onChange={(next) => set({ lightImages: next })} />
             </FieldGroup>
             <FieldGroup title="其他" theme={ctx.theme}>
                 <label style={{ fontSize: 12, color: ctx.theme.node.muted }}>
                     描述
                     <textarea value={(m.extraText as string) || ""} onChange={(e) => set({ extraText: e.target.value })} rows={2} style={{ ...input, marginTop: 4, resize: "vertical" }} />
                 </label>
-                <ImagesField label="参考图" values={fieldImages(m.extraImages, EXTRA_MAX)} max={EXTRA_MAX} theme={ctx.theme} onChange={(next) => set({ extraImages: next })} />
+                <ImagesField label="参考图" values={fieldImages(m.extraImages, EXTRA_MAX)} max={EXTRA_MAX} candidates={canvasImages} theme={ctx.theme} onChange={(next) => set({ extraImages: next })} />
             </FieldGroup>
             <div>
                 <div style={{ fontSize: 12, color: ctx.theme.node.muted, marginBottom: 4 }}>提示词预览</div>
@@ -393,6 +531,20 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
                 ) : (
                     <div style={{ fontSize: 12, color: ctx.theme.node.muted }}>生成后自动保存版本，点击切换，× 删除</div>
                 )}
+                <label style={{ ...btn, alignSelf: "flex-start", cursor: "pointer" }}>
+                    导入图片
+                    <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        hidden
+                        onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            e.target.value = "";
+                            importFilesAsVersions(ctx, files).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                        }}
+                    />
+                </label>
             </FieldGroup>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <select value={model} onChange={(e) => pickModel(e.target.value)} style={{ ...select, flex: 1 }}>
@@ -403,12 +555,18 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
                         </option>
                     ))}
                 </select>
-                <button type="button" onClick={generate} disabled={running} style={{ ...btn, opacity: running ? 0.6 : 1 }}>
-                    {running ? "生成中…" : "生成场景图"}
-                </button>
+                {running ? (
+                    <button type="button" onClick={cancel} style={btn}>
+                        取消
+                    </button>
+                ) : (
+                    <button type="button" onClick={generate} style={btn}>
+                        生成场景图
+                    </button>
+                )}
             </div>
             <div style={{ fontSize: 11, color: ctx.theme.node.muted }}>尺寸默认 16:9 · 画质跟随全局图片设置（建议 2K）</div>
-            {error && <div style={{ fontSize: 12, color: "#ef4444" }}>{error}</div>}
+            {errMsg && <div style={{ fontSize: 12, color: "#ef4444", whiteSpace: "pre-wrap" }}>{errMsg}</div>}
         </div>
     );
 }
@@ -416,7 +574,7 @@ function ScenePanel({ ctx, onClose }: CanvasNodePanelProps) {
 export default definePlugin({
     id: "scene",
     name: "场景节点",
-    version: "1.0.1",
+    version: "1.0.2",
     description: "填写场景表单，拼装提示词并用参考图生成场景图",
     nodes: [
         {
@@ -436,6 +594,35 @@ export default definePlugin({
             },
             Content: SceneContent,
             Panel: ScenePanel,
+            toolbar: (ctx) => [
+                {
+                    id: "download",
+                    title: "下载选中版本",
+                    label: "下载",
+                    icon: "⬇️",
+                    onClick: () => {
+                        const meta = ctx.node.metadata || {};
+                        const list = (Array.isArray(meta.versions) ? (meta.versions as SceneVersion[]) : []).filter((v) => v && v.image);
+                        const current = list.find((v) => v.id === meta.activeVersionId) || list[list.length - 1];
+                        const url = current?.image || (typeof meta.content === "string" ? meta.content : "");
+                        if (!url) return;
+                        const num = list.findIndex((v) => v === current) + 1 || list.length;
+                        const filename = `${((typeof meta.name === "string" && meta.name) || "场景").replace(/[\\/:*?"<>|]/g, "_")}-v${num}.png`;
+                        downloadImage(url, filename).catch((e) => console.error("[scene] download failed", e));
+                    },
+                },
+                {
+                    id: "import",
+                    title: "导入图片新增版本",
+                    label: "导入",
+                    icon: "📥",
+                    onClick: () => {
+                        pickImageFiles((files) => {
+                            importFilesAsVersions(ctx, files).catch((e) => ctx.updateMetadata({ generateError: e instanceof Error ? e.message : String(e) }));
+                        });
+                    },
+                },
+            ],
             onDoubleClick: (ctx) => {
                 if (!activeImage(ctx.node.metadata || {})) return false;
                 ctx.updateMetadata({ previewOpen: true });
