@@ -35,3 +35,22 @@ sync/upstream-vX.Y.Z ──PR──► develop   # 禁止直接在 develop 上 m
 * 禁止 `push -f` 到 `main/develop`；force-push 仅限个人 `feature/*` 且提前说明。
 * 同步上游：`git fetch upstream` → `sync/upstream-*` 分支 merge `upstream/main` → 解冲突（保二次开发层，`VERSION` 跟上游）→ PR 到 `develop`。
 * 发版：`pending-test` 通过 → 整理 `CHANGELOG` → 升 `VERSION` → 全量提交 → 打 `v*` tag（沿用上游发版流程，见 `agents/workflow.md`）。
+
+## 发布产物只含产品层
+
+本项目是 vibecoding 二次开发仓：根目录（`AGENTS.md`、`docs/`、`.opencode/`、分析文档等）是 AI 协作的二次开发层，**不属于发布物**；产品实体只有 `infinite-canvas/`（CHANGELOG/VERSION/Dockerfile 均在其中）。
+
+* `main` 与 `develop` 保持全树同构（含二次开发层），merge 干净、历史清晰。
+* **发版 tag 打在 `infinite-canvas/` 子树的 subtree split 上**，不在 main 提交本身：
+
+```
+git checkout main
+git subtree split --prefix=infinite-canvas main -b product-split
+git tag -a v0.18.2 product-split -m "v0.18.2: ..."
+git push origin v0.18.2
+git branch -D product-split
+```
+
+  这样 tag 的源码树只含产品层（`web/`、`canvas-agent/`、`plugins/`、`canvas-proxy/` 等），clone/下载 tag 即得干净产品仓。
+* `git describe` 在 main 上不适用于此类 tag，属预期；版本定位以 `infinite-canvas/VERSION` 和 CHANGELOG 为准。
+* v0.18.1 及更早的 tag 打在 main 全树上（历史现状），自下个版本起按本节执行。

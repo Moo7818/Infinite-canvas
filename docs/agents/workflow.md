@@ -10,6 +10,7 @@
 ## 发版
 
 * `CHANGELOG Unreleased` 整理成版本记录（保留空 `Unreleased`）→ 升 `infinite-canvas/VERSION` → 全量提交 → 打 `v*` tag。
+* tag 打在 `infinite-canvas/` 子树的 subtree split 上，发布产物不含根二次开发层（流程见 `../git-branch-strategy.md`「发布产物只含产品层」）。
 * 不执行编译/测试/构建（用户明确要求除外）。
 
 ## PR 审查
