@@ -13,7 +13,18 @@ function createElement(type: unknown, props: Record<string, unknown> | null, key
     const react = getReact();
     const resolvedType = type === Fragment ? react.Fragment : type;
     // automatic 运行时已把 children 放进 props;key 单独传入以避免展开 key 警告。
-    const config = key === undefined ? props : { ...(props ?? {}), key };
+    let config = key === undefined ? props : { ...(props ?? {}), key };
+    // automatic 静态多子节点以数组形式进入 props，classic createElement 会逐个误报 key 警告；
+    // 给无 key 的补位置 key（已有 key 的不动），与编译器原生行为一致。动态列表作者自带 key，不受影响。
+    const children = (config as { children?: unknown } | null)?.children;
+    if (Array.isArray(children) && children.some((child) => react.isValidElement(child) && (child as { key?: unknown }).key == null)) {
+        config = {
+            ...(config ?? {}),
+            children: children.map((child, index) =>
+                react.isValidElement(child) && (child as { key?: unknown }).key == null ? react.cloneElement(child as never, { key: `__static_${index}` } as never) : child,
+            ),
+        };
+    }
     return react.createElement(resolvedType as never, config as never);
 }
 
