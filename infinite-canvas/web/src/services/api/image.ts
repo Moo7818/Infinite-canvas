@@ -735,7 +735,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
                 config: requestConfig,
                 prompt: withSystemPrompt(requestConfig, prompt),
                 images: [],
-                params: { size: requestSize, quality, count: n, ...(background ? { background } : {}), ...(config.customParams || {}) },
+                params: { size: requestSize, quality, count: n, ...(background ? { background } : {}) },
                 signal: options?.signal,
                 onProgress: options?.onProgress,
             });
@@ -797,7 +797,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
                 config: requestConfig,
                 prompt: withSystemPrompt(requestConfig, requestPrompt),
                 images: refs,
-                params: { size: requestSize, quality, count: n, ...(background ? { background } : {}), ...(config.customParams || {}) },
+                params: { size: requestSize, quality, count: n, ...(background ? { background } : {}) },
                 signal: options?.signal,
                 onProgress: options?.onProgress,
             });
