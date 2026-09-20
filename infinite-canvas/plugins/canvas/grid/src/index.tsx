@@ -375,9 +375,8 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
             const { references } = buildGridPrompt(fields);
             const rawDoc = ((m as GridFields).doc || "");
             const chosen = model || ctx.ai.defaultModel("image");
-            // 第一段：调度展开（多模态，LLM 可见参考图）；失败回退用文档原文。
+            // 第一段：调度展开（多模态，LLM 可见参考图）；无回退——失败或空返回直接中断，不调生图。
             let expanded = "";
-            let expandError = "";
             try {
                 const exp = await ctx.ai.generateText(buildExpansionInput(live.characters, live.spaceName, live.spaceImages, rawDoc), {
                     system: EXPANSION_SYSTEM,
@@ -386,12 +385,11 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     signal: controller.signal,
                 });
                 if (exp.text && exp.text.trim()) expanded = exp.text.trim();
-                else expandError = "展开返回空";
             } catch (e) {
-                expanded = "";
-                expandError = e instanceof Error ? e.message : String(e);
+                throw new Error(`调度展开失败：${e instanceof Error ? e.message : String(e)}`);
             }
-            const { prompt } = buildGridPrompt({ ...fields, doc: expanded || rawDoc });
+            if (!expanded) throw new Error("调度展开返回空，已中断（未调用生图）");
+            const { prompt } = buildGridPrompt({ ...fields, doc: expanded });
             // 宫格默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
             console.info(`[grid] 提交生成 参考图${references.length}张${expanded ? "" : "（调度展开回退原文）"}`);
             const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
@@ -406,7 +404,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 const base =
                     !cur.length && typeof prev.content === "string" && prev.content ? [{ id: newVersionId(), image: prev.content, prompt: "", createdAt: "" }, ...cur] : cur;
                 const next = [...base, ver];
-                return { versions: next, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined, expanded: expanded || undefined, expandedFrom: expanded ? rawDoc : undefined, expandError: expandError || undefined };
+                return { versions: next, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined, expanded, expandedFrom: rawDoc, expandError: undefined };
             });
         } catch (e) {
             const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
@@ -536,7 +534,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
             <div>
                 <div style={{ fontSize: 12, color: ctx.theme.node.muted, marginBottom: 4 }}>LLM 调度展开（上次生成）</div>
                 <div style={{ fontSize: 12, lineHeight: 1.6, padding: "8px 10px", borderRadius: 8, background: ctx.theme.node.fill, whiteSpace: "pre-wrap", maxHeight: 120, overflow: "auto" }}>
-                    {expandedText || "生成时由默认文本模型自动展开；失败回退用调度文档原文"}
+                    {expandedText || "生成时由默认文本模型自动展开；展开失败则中断，不调生图"}
                     {typeof m.expandError === "string" && m.expandError ? <div style={{ color: "#ef4444" }}>上次展开失败：{m.expandError}</div> : null}
                     {expandedText !== "" && !expandedFresh ? <div style={{ color: ctx.theme.node.muted }}>（文档已改，下次生成时重新展开）</div> : null}
                 </div>
