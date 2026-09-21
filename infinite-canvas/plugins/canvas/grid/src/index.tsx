@@ -171,6 +171,31 @@ function readImageFile(file: File): Promise<string> {
     });
 }
 
+// 展开步图片仅供 LLM 阅读理解（看清人/景即可），压到 768 转 JPEG；成图引用仍用原图，不影响输出质量。
+async function shrinkForReading(src: string, maxEdge = 768): Promise<string> {
+    if (!src.startsWith("data:image/")) return src;
+    try {
+        const dims = await imageDims(src);
+        const scale = Math.min(1, maxEdge / Math.max(dims.w, dims.h));
+        if (scale >= 1) return src;
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = reject;
+            el.src = src;
+        });
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        const g = c.getContext("2d");
+        if (!g) return src;
+        g.drawImage(img, 0, 0, c.width, c.height);
+        return c.toDataURL("image/jpeg", 0.8);
+    } catch {
+        return src;
+    }
+}
+
 function imageDims(src: string): Promise<{ w: number; h: number }> {
     return new Promise((resolve) => {
         const img = new Image();
@@ -378,10 +403,11 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
             // 第一段：调度展开（多模态，LLM 可见参考图）；无回退——失败或空返回直接中断，不调生图。
             let expanded = "";
             try {
+                const readingRefs = await Promise.all(references.map((u) => shrinkForReading(u)));
                 const exp = await ctx.ai.generateText(buildExpansionInput(live.characters, live.spaceName, live.spaceImages, rawDoc), {
                     system: EXPANSION_SYSTEM,
                     model: ctx.ai.defaultModel("text"),
-                    images: references,
+                    images: readingRefs,
                     signal: controller.signal,
                 });
                 if (exp.text && exp.text.trim()) expanded = exp.text.trim();
