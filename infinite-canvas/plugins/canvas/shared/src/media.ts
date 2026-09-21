@@ -18,9 +18,9 @@ export function imageDims(src: string): Promise<{ w: number; h: number }> {
     });
 }
 
-// 引用图下采样：最长边压到 maxEdge 并转 JPEG。只用于构图参考（模型内部本就会缩），
+// 引用图下采样：最长边压到 maxEdge（默认 2048）并转 JPEG（质量 0.94）。只用于构图参考（模型内部本就会缩），
 // 生成结果原图不动，输出质量零影响；远端 URL 原样透传，失败原样返回。
-export async function downscaleImage(src: string, maxEdge = 1536): Promise<string> {
+export async function downscaleImage(src: string, maxEdge = 2048): Promise<string> {
     if (!src.startsWith("data:image/")) return src;
     try {
         const d = await imageDims(src);
@@ -38,7 +38,7 @@ export async function downscaleImage(src: string, maxEdge = 1536): Promise<strin
         const g = c.getContext("2d");
         if (!g) return src;
         g.drawImage(img, 0, 0, c.width, c.height);
-        return c.toDataURL("image/jpeg", 0.85);
+        return c.toDataURL("image/jpeg", 0.94);
     } catch {
         return src;
     }
