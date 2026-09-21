@@ -19,7 +19,7 @@ import {
 } from "canvas-plugin-shared";
 import type { VersionItem } from "canvas-plugin-shared";
 
-export const PROMPT_PREFIX = "2*2四宫格人物调度图：同一固定机位一次生成四帧人物调度静帧，按调度文档执行。";
+export const PROMPT_PREFIX = "2*2四宫格。";
 // 机位锁定：不可编辑，作用于全部四格。
 export const LOCKED_CAMERA = "固定机位空间斜上方45度俯拍，广角，光线自然，照片级写实，电影级光影";
 
@@ -92,21 +92,24 @@ function collectRefs(characters: GridResolvedCell[], spaceImages: string[]): str
 export function buildGridPrompt(f: { name?: string; doc?: string; characters: GridResolvedCell[]; spaceName?: string; spaceImages: string[] }): { prompt: string; references: string[] } {
     const references = collectRefs(f.characters, f.spaceImages || []);
     const pos = (img: string) => references.indexOf(img) + 1;
-    const mark = (imgs: string[]) => (imgs.length ? `（图片${imgs.map(pos).join("、")}）` : "");
+    const mark = (imgs: string[]) => (imgs.length ? `图片${imgs.map(pos).join("、")}` : "");
 
+    // 紧凑格式（对标高效原版）：无标签无元指令，一气呵成。
+    // 2*2四宫格。苏：图片1，林：图片2，空间：图片3。统一机位：…。<调度正文>
     const parts: string[] = [PROMPT_PREFIX];
-    if (f.name?.trim()) parts.push(`调度主题：${f.name.trim()}。`);
-    const cast = f.characters
-        .map((c) => (c.name ? `${c.name}${mark(c.images)}` : ""))
-        .filter(Boolean)
-        .join("、");
-    if (cast) parts.push(`出场：${cast}。`);
-    if (f.spaceName?.trim() || (f.spaceImages || []).length) {
-        parts.push(`空间：${f.spaceName?.trim() || ""}${mark(f.spaceImages || [])}。`);
+    const headed: string[] = [];
+    for (const c of f.characters) {
+        if (!c.name) continue;
+        headed.push(c.images.length ? `${c.name}：${mark(c.images)}` : c.name);
     }
-    parts.push(`各宫格机位统一：${LOCKED_CAMERA}。`);
+    if (f.spaceName?.trim() || (f.spaceImages || []).length) {
+        const sImgs = f.spaceImages || [];
+        headed.push(sImgs.length ? `空间：${mark(sImgs)}` : `空间：${f.spaceName?.trim() || ""}`);
+    }
+    if (headed.length) parts.push(`${headed.join("，")}。`);
+    parts.push(`统一机位：${LOCKED_CAMERA}。`);
     const docText = f.doc?.trim() || "";
-    if (docText) parts.push(`调度：${docText}${/[。？！？!]$/.test(docText) ? "" : "。"}`);
+    if (docText) parts.push(docText);
     return { prompt: parts.join(""), references };
 }
 
