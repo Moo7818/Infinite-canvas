@@ -1,0 +1,21 @@
+{
+    "name": "canvas-plugin-shared",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Infinite Canvas 自研节点插件的共享工具/UI（随插件 bundle 打包，不独立发布）",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit"
+    },
+    "peerDependencies": {
+        "@infinite-canvas/plugin-sdk": "*"
+    },
+    "devDependencies": {
+        "@infinite-canvas/plugin-sdk": "file:../sdk",
+        "@types/react": "19.1.12",
+        "typescript": "^5"
+    }
+}

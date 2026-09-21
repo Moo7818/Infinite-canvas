@@ -18,7 +18,7 @@
 2. 宿主 `updateMetadata` 函数式重载，插件读改写一律走它（消 versions 并发覆盖）。
 3. 宿主暴露 `storeImage`，插件 metadata 只存 key（治版本膨胀）。
 4. 生图脚本建任务步切 `request({..., timeout: 30000})`（早失败早提示，减误重发）。
-5. 抽 `plugins/canvas/shared`（工具/组件/防重样板），三 Panel 演进为 schema 驱动（字段清单单一来源，顺带消灭 `as string` 断言与 `filledCount` 隐性耦合、内联样式缓存、`fitNode/set` 合并更新、取证标记收编）。
+5. 抽 `plugins/canvas/shared`（工具/组件/防重样板）✅已落地；三 Panel 演进为 schema 驱动（字段清单单一来源，顺带消灭 `as string` 断言与 `filledCount` 隐性耦合、内联样式缓存、`fitNode/set` 合并更新、取证标记收编）仍待办。
 6. MODEL_ALLOW 可配置化（放开全量或存 metadata 用户勾选）。
 
 ## 非目标
