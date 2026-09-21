@@ -37,3 +37,9 @@
 1. 渠道脚本搜 `replyType` 是否为 `"async"`；
 2. Network 看 POST 首包：秒回 `{id, status:"running"}` + 随后一串 GET `/v1/api/result` = 新脚本生效；分钟级才回 = 旧脚本还在跑；
 3. 插件管理器看版本号（本地插件启动时 bust 重拉，URL 安装看安装时快照）。
+
+## 5 模型级参数约束（官方文档，违背即 400）
+
+* gpt-image-2 / gpt-image-2.5（非 vip）：`aspectRatio` 只接受比例串或 1K 像素，`quality` 只接受 `"auto"`。脚本已按模型名分流：像素→最近比例串、quality 强制 auto（`bc98399`）；vip 系（vip/flare/sunburst）保持像素透传与原 quality。
+* nano 全系：比例串（含 auto）+ `imageSize` 1K/2K/4K，脚本 `toRatio` 换算，无此坑。
+* 节点：官方另有国内 `https://grsai.dakka.com.cn`；跨境长连接频繁 RST 时优先切国内节点（渠道 baseUrl 直接改，无需重导入）。

@@ -79,7 +79,11 @@ export function usePluginHost(params: PluginHostParams) {
             generateText: async (prompt, options) => {
                 const config = { ...buildGenerationConfig(effectiveConfig, undefined, "text"), ...(options?.model ? { model: options.model } : {}) };
                 ensureReady(config);
-                const messages: AiTextMessage[] = [...(options?.system ? [{ role: "system" as const, content: options.system }] : []), { role: "user" as const, content: prompt }];
+                const refs = (options?.images || []).filter(Boolean);
+                const userContent = refs.length
+                    ? [{ role: "user" as const, content: [{ type: "text" as const, text: prompt }, ...refs.map((url) => ({ type: "image_url" as const, image_url: { url } }))] }]
+                    : [{ role: "user" as const, content: prompt }];
+                const messages: AiTextMessage[] = [...(options?.system ? [{ role: "system" as const, content: options.system }] : []), ...userContent];
                 const text = await requestImageQuestion(config, messages, (delta) => options?.onDelta?.(delta), { signal: options?.signal });
                 return { text };
             },

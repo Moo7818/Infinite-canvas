@@ -178,6 +178,7 @@ export type GenerateTextOptions = {
     model?: string;
     system?: string; // 附加系统提示词(拼在宿主系统提示之后)
     onDelta?: (text: string) => void; // 流式增量回调
+    images?: string[]; // 引用图片(dataURL 或 URL)，拼入多模态消息
 };
 
 export type GenerateTextResult = {

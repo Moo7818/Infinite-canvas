@@ -128,6 +128,28 @@ export function buildDispatchDraft(characters: GridResolvedCell[], spaceName: st
     return lines.join("\n");
 }
 
+// 调度展开：把出场/空间/文档喂给默认文本模型（多模态，可见参考图），返回四句成片级分镜描述。
+// 失败或返回空时调用方回退用调度文档原文，不断链。
+export const EXPANSION_SYSTEM =
+    "你是分镜调度编剧。根据出场角色、空间与调度文档，把内容展开为成片级拍摄提示：共四句，每句以左上宫格/右上宫格/左下宫格/右下宫格开头，描述人物动作走位、机位关系与空间细节；可用“图片n”指代参考图。只输出四句，不要解释。";
+
+export function buildExpansionInput(characters: GridResolvedCell[], spaceName: string, spaceImages: string[], doc: string): string {
+    const references = collectRefs(characters, spaceImages);
+    const pos = (img: string) => references.indexOf(img) + 1;
+    const lines: string[] = [];
+    const cast = characters
+        .filter((c) => c.name)
+        .map((c) => `${c.name}${c.images.length ? `（图片${c.images.map(pos).join("、")}）` : ""}`)
+        .join("、");
+    if (cast) lines.push(`出场：${cast}`);
+    if (spaceName || spaceImages.length) {
+        lines.push(`空间：${spaceName}${spaceImages.length ? `（图片${spaceImages.map(pos).join("、")}）` : ""}`);
+    }
+    lines.push(`统一机位：${LOCKED_CAMERA}`);
+    if (doc.trim()) lines.push(`调度文档：${doc.trim()}`);
+    return lines.join("\n");
+}
+
 function filledCount(m: CanvasNodeMetadata, cast: GridCast): number {
     const r = m as Record<string, unknown>;
     const textKeys = ["name", "doc"];
@@ -147,6 +169,31 @@ function readImageFile(file: File): Promise<string> {
         reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(file);
     });
+}
+
+// 展开步图片仅供 LLM 阅读理解（看清人/景即可），压到 768 转 JPEG；成图引用仍用原图，不影响输出质量。
+async function shrinkForReading(src: string, maxEdge = 768): Promise<string> {
+    if (!src.startsWith("data:image/")) return src;
+    try {
+        const dims = await imageDims(src);
+        const scale = Math.min(1, maxEdge / Math.max(dims.w, dims.h));
+        if (scale >= 1) return src;
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = reject;
+            el.src = src;
+        });
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        const g = c.getContext("2d");
+        if (!g) return src;
+        g.drawImage(img, 0, 0, c.width, c.height);
+        return c.toDataURL("image/jpeg", 0.8);
+    } catch {
+        return src;
+    }
 }
 
 function imageDims(src: string): Promise<{ w: number; h: number }> {
@@ -294,7 +341,11 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
         return hit.length ? hit : allModels;
     })();
     const cast = resolveCast(ctx.getNodes(), m);
-    const preview = buildGridPrompt({ ...(m as GridFields), characters: cast.characters, spaceName: cast.spaceName, spaceImages: cast.spaceImages }).prompt;
+    const rawDoc = ((m as GridFields).doc || "");
+    const expandedText = typeof m.expanded === "string" ? m.expanded : "";
+    const expandedFresh = expandedText !== "" && (m.expandedFrom as string) === rawDoc;
+    // 提示词预览只展示结构（前缀/出场/空间/机位），调度正文不进预览框，终稿以生成时为准。
+    const preview = buildGridPrompt({ ...(m as GridFields), doc: "", characters: cast.characters, spaceName: cast.spaceName, spaceImages: cast.spaceImages }).prompt;
     const errMsg = error || (typeof m.generateError === "string" ? m.generateError : "");
     const charNodes = ctx.getNodes().filter((n) => n.type === "character:role");
     const spaceNodes = ctx.getNodes().filter((n) => n.type === "scene:view");
@@ -342,13 +393,31 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
         runningControllers.set(ctx.node.id, controller);
         setRunning(true);
         setError("");
-        set({ generating: true, generateError: undefined });
+        set({ generating: true, generateError: undefined, expandError: undefined });
         try {
             const live = resolveCast(ctx.getNodes(), ctx.node.metadata || {});
-            const { prompt, references } = buildGridPrompt({ ...(m as GridFields), characters: live.characters, spaceName: live.spaceName, spaceImages: live.spaceImages });
+            const fields = { ...(m as GridFields), characters: live.characters, spaceName: live.spaceName, spaceImages: live.spaceImages };
+            const { references } = buildGridPrompt(fields);
+            const rawDoc = ((m as GridFields).doc || "");
             const chosen = model || ctx.ai.defaultModel("image");
+            // 第一段：调度展开（多模态，LLM 可见参考图）；无回退——失败或空返回直接中断，不调生图。
+            let expanded = "";
+            try {
+                const readingRefs = await Promise.all(references.map((u) => shrinkForReading(u)));
+                const exp = await ctx.ai.generateText(buildExpansionInput(live.characters, live.spaceName, live.spaceImages, rawDoc), {
+                    system: EXPANSION_SYSTEM,
+                    model: ctx.ai.defaultModel("text"),
+                    images: readingRefs,
+                    signal: controller.signal,
+                });
+                if (exp.text && exp.text.trim()) expanded = exp.text.trim();
+            } catch (e) {
+                throw new Error(`调度展开失败：${e instanceof Error ? e.message : String(e)}`);
+            }
+            if (!expanded) throw new Error("调度展开返回空，已中断（未调用生图）");
+            const { prompt } = buildGridPrompt({ ...fields, doc: expanded });
             // 宫格默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
-            console.info(`[grid] 提交生成 参考图${references.length}张`);
+            console.info(`[grid] 提交生成 参考图${references.length}张${expanded ? "" : "（调度展开回退原文）"}`);
             const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
@@ -361,7 +430,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                 const base =
                     !cur.length && typeof prev.content === "string" && prev.content ? [{ id: newVersionId(), image: prev.content, prompt: "", createdAt: "" }, ...cur] : cur;
                 const next = [...base, ver];
-                return { versions: next, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined };
+                return { versions: next, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined, expanded, expandedFrom: rawDoc, expandError: undefined };
             });
         } catch (e) {
             const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
@@ -487,6 +556,14 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
             <div>
                 <div style={{ fontSize: 12, color: ctx.theme.node.muted, marginBottom: 4 }}>提示词预览</div>
                 <div style={{ fontSize: 12, lineHeight: 1.6, padding: "8px 10px", borderRadius: 8, background: ctx.theme.node.fill, whiteSpace: "pre-wrap", maxHeight: 120, overflow: "auto" }}>{preview}</div>
+            </div>
+            <div>
+                <div style={{ fontSize: 12, color: ctx.theme.node.muted, marginBottom: 4 }}>LLM 调度展开（上次生成）</div>
+                <div style={{ fontSize: 12, lineHeight: 1.6, padding: "8px 10px", borderRadius: 8, background: ctx.theme.node.fill, whiteSpace: "pre-wrap", maxHeight: 120, overflow: "auto" }}>
+                    {expandedText || "生成时由默认文本模型自动展开；展开失败则中断，不调生图"}
+                    {typeof m.expandError === "string" && m.expandError ? <div style={{ color: "#ef4444" }}>上次展开失败：{m.expandError}</div> : null}
+                    {expandedText !== "" && !expandedFresh ? <div style={{ color: ctx.theme.node.muted }}>（文档已改，下次生成时重新展开）</div> : null}
+                </div>
             </div>
             <FieldGroup title={`版本（${versions.length}）`} theme={ctx.theme}>
                 {versions.length ? (
