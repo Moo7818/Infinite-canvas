@@ -18,6 +18,31 @@ export function imageDims(src: string): Promise<{ w: number; h: number }> {
     });
 }
 
+// 引用图下采样：最长边压到 maxEdge 并转 JPEG。只用于构图参考（模型内部本就会缩），
+// 生成结果原图不动，输出质量零影响；远端 URL 原样透传，失败原样返回。
+export async function downscaleImage(src: string, maxEdge = 1536): Promise<string> {
+    if (!src.startsWith("data:image/")) return src;
+    try {
+        const d = await imageDims(src);
+        const scale = Math.min(1, maxEdge / Math.max(d.w, d.h));
+        if (scale >= 1) return src;
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = reject;
+            el.src = src;
+        });
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        const g = c.getContext("2d");
+        if (!g) return src;
+        g.drawImage(img, 0, 0, c.width, c.height);
+        return c.toDataURL("image/jpeg", 0.85);
+    } catch {
+        return src;
+    }
+}
 // 节点按实际图片比例自适应：宽固定，图高换算后夹紧，+30 留底部状态条。
 export async function fitNodeToImage(updateNode: (patch: { width: number; height: number }) => void, url: string, width = 300): Promise<void> {
     const d = await imageDims(url);

@@ -6,6 +6,7 @@ import {
     FieldGroup,
     activeImageUrl,
     downloadImage,
+    downscaleImage,
     fitNodeToImage,
     imageDims,
     importFilesAsVersions,
@@ -327,7 +328,9 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
             const { prompt } = buildGridPrompt({ ...fields, doc: expanded });
             // 宫格默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
             console.info(`[grid] 提交生成 参考图${references.length}张${expanded ? "" : "（调度展开回退原文）"}`);
-            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
+            // 引用图压到 1536：边缘 413 拒收 10MB 级 body，只压引用，输出不动。
+            const refs = await Promise.all(references.map((u) => downscaleImage(u, 1536)));
+            const res = await ctx.ai.generateImage(prompt, { references: refs, model: chosen, size: "16:9", signal: controller.signal });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
             await fitNode(url);
