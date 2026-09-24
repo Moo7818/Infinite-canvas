@@ -49,7 +49,7 @@ function specForModel(value: string): VideoModelSpec {
 
 export type VideoVersion = VersionItem;
 
-export const REF_MAX = 3;
+export const REF_MAX = 9; // 对齐接口文档：images 最多 9 张
 
 function filledCount(m: CanvasNodeMetadata): number {
     const r = m as Record<string, unknown>;
