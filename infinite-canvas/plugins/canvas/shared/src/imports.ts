@@ -3,10 +3,10 @@ import { fitNodeToImage, readImageFile } from "./media";
 import { importAppendPatch, makeVersionItems } from "./versions";
 
 // 工具条调起系统文件选择框（工具条项无 DOM 插槽，只能动态创建 input）。
-export function pickImageFiles(onFiles: (files: File[]) => void): void {
+export function pickImageFiles(onFiles: (files: File[]) => void, accept = "image/*"): void {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = accept;
     input.multiple = true;
     input.onchange = () => {
         const files = Array.from(input.files || []);

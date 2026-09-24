@@ -60,7 +60,7 @@ export function nextAfterDelete(versions: VersionItem[], activeId: string | unde
     return { rest, next };
 }
 
-export function versionFilename(name: string, fallback: string, num: number): string {
+export function versionFilename(name: string, fallback: string, num: number, ext = "png"): string {
     const safe = (name.trim() || fallback).replace(/[\\/:*?"<>|]/g, "_");
-    return `${safe}-v${num}.png`;
+    return `${safe}-v${num}.${ext}`;
 }

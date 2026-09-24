@@ -14,6 +14,7 @@
 + [新增] 自有场景节点插件（`scene:view`）：表单填写场景要素并拼装提示词，用参考图生成电影质感场景图。
 + [新增] 自有道具节点插件（`prop:item`）：表单填写道具要素并拼装提示词，用参考图生成产品级道具图。
 + [新增] 自有宫格调度节点插件（`grid:board`）：锁死 2*2 四宫格，按名引用角色/空间节点，调度文档拼装提示词一次生成四帧静帧。
++ [新增] 自有影片节点插件（`video:film`）：按模型自适应时长/比例参数，参考图生成视频。
 + [新增] Grsai 渠道模型配置资产（`docs/assets/grsai-autodl-canvas-config.json`）：16 个生图模型脚本统一 `replyType: async` 快返任务 id 再轮询 `/v1/api/result`，慢模型不再被网关掐断连接；含 minimax-h3 视频脚本与双文本脚本，可整包导入。
 + [新增] 插件宿主接口扩展：`updateMetadata` 函数式重载（并发读改写安全）、`panelPlacement` 面板方位、`hasTargetHandle` 输入连接点开关、右键菜单 `pluginItems` 插槽，插件运行时改为先初始化后注册。
 
