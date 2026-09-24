@@ -48,7 +48,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         scaleRef.current = next.k;
 
         const world = worldRef.current;
-        if (world) world.style.transform = `translate3d(${next.x}px, ${next.y}px, 0) scale(${next.k})`;
+        if (world) world.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.k})`;
 
         const grid = gridRef.current;
         if (grid) {
@@ -295,8 +295,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
                 ref={worldRef}
                 className="absolute origin-top-left"
                 style={{
-                    transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.k})`,
-                    willChange: "transform",
+                    transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.k})`,
                 }}
             >
                 {children}
