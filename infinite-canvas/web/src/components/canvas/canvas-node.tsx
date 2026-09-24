@@ -5,7 +5,7 @@ import { ChevronRight, Copy, Download, Group, Image as ImageIcon, Music2, Puzzle
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes } from "@/lib/image-utils";
 import { pickImageSource } from "@/lib/image-thumbnail";
-import { previewUrlFor, subscribeImagePreviews, getImagePreviewRevision } from "@/services/image-storage";
+import { ensureImagePreview, previewUrlFor, subscribeImagePreviews, getImagePreviewRevision } from "@/services/image-storage";
 import { getNodeDefinition } from "@/lib/canvas/node-registry";
 import { buildNodeContext } from "@/lib/canvas/plugin-node-context";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -776,6 +776,10 @@ function ImageContent({
     const primaryImageId = node.metadata?.primaryImageId || images[0]?.id;
     const primaryImage = images.find((image) => image.id === primaryImageId);
     const primaryContent = primaryImage?.content || node.metadata?.content;
+    useEffect(() => {
+        const keys = new Set([primaryImage?.storageKey, node.metadata?.storageKey, ...(batchExpanded ? images.map((image) => image.storageKey) : [])].filter((key): key is string => Boolean(key)));
+        keys.forEach((key) => void ensureImagePreview(key));
+    }, [batchExpanded, images, node.metadata?.storageKey, primaryImage?.storageKey]);
     const primaryPreviewUrl = previewUrlFor(primaryImage?.storageKey || node.metadata?.storageKey);
     const primarySource = primaryContent
         ? pickImageSource({
