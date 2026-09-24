@@ -694,8 +694,7 @@ function InfiniteCanvasPage() {
         const left = -viewport.x / viewport.k - padding;
         const top = -viewport.y / viewport.k - padding;
         return { left, top, right: left + width / viewport.k + padding * 2, bottom: top + height / viewport.k + padding * 2 };
-        // `nodes` keeps the container rect re-read on node changes, matching the previous behaviour when the container resizes without a size update.
-    }, [nodes, size.height, size.width, viewport.k, viewport.x, viewport.y]);
+    }, [size.height, size.width, viewport.k, viewport.x, viewport.y]);
 
     const visibleNodes = useMemo(
         () => nodes.filter((node) => node.position.x + node.width > viewBounds.left && node.position.x < viewBounds.right && node.position.y + node.height > viewBounds.top && node.position.y < viewBounds.bottom),
@@ -1365,12 +1364,8 @@ function InfiniteCanvasPage() {
                         return initial ? { ...node, position: { x: initial.x + dx, y: initial.y + dy } } : node;
                     });
                     setDropTargetGroupId(findGroupDropTarget(movedIds, previewNodes)?.id || null);
-                    setNodes((prev) =>
-                        prev.map((node) => {
-                            const initial = initialPositions.get(node.id);
-                            return initial ? { ...node, position: { x: initial.x + dx, y: initial.y + dy } } : node;
-                        }),
-                    );
+                    // `previewNodes` is already based on the latest ref and contains the complete drag frame.
+                    setNodes(previewNodes);
                     rafRef.current = null;
                 });
                 return;

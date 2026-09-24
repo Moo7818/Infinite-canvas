@@ -30,7 +30,10 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         startedOnBackground: false,
     });
     const scaleRef = useRef(viewport.k);
+    const viewportRef = useRef(viewport);
     const frameRef = useRef<number | null>(null);
+    const wheelFrameRef = useRef<number | null>(null);
+    const pendingWheelRef = useRef<{ delta: number; clientX: number; clientY: number } | null>(null);
     const nextViewportRef = useRef<ViewportTransform | null>(null);
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [isControlPressed, setIsControlPressed] = useState(false);
@@ -38,11 +41,13 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
 
     useEffect(() => {
         scaleRef.current = viewport.k;
-    }, [viewport.k]);
+        viewportRef.current = viewport;
+    }, [viewport]);
 
     useEffect(
         () => () => {
             if (frameRef.current) cancelAnimationFrame(frameRef.current);
+            if (wheelFrameRef.current) cancelAnimationFrame(wheelFrameRef.current);
         },
         [],
     );
@@ -88,21 +93,36 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
 
-        const delta = -event.deltaY;
-        const factor = Math.pow(1.1, delta / 100);
-        const newScale = Math.min(Math.max(viewport.k * factor, 0.05), 5);
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
+        const pending = pendingWheelRef.current;
+        pendingWheelRef.current = {
+            delta: (pending?.delta || 0) - event.deltaY,
+            clientX: event.clientX,
+            clientY: event.clientY,
+        };
+        if (wheelFrameRef.current) return;
 
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
-        const worldX = (mouseX - viewport.x) / viewport.k;
-        const worldY = (mouseY - viewport.y) / viewport.k;
+        wheelFrameRef.current = requestAnimationFrame(() => {
+            wheelFrameRef.current = null;
+            const wheel = pendingWheelRef.current;
+            pendingWheelRef.current = null;
+            const rect = containerRef.current?.getBoundingClientRect();
+            if (!wheel || !rect) return;
 
-        onViewportChange({
-            x: mouseX - worldX * newScale,
-            y: mouseY - worldY * newScale,
-            k: newScale,
+            const currentViewport = viewportRef.current;
+            const factor = Math.pow(1.1, wheel.delta / 100);
+            const newScale = Math.min(Math.max(currentViewport.k * factor, 0.05), 5);
+            const mouseX = wheel.clientX - rect.left;
+            const mouseY = wheel.clientY - rect.top;
+            const worldX = (mouseX - currentViewport.x) / currentViewport.k;
+            const worldY = (mouseY - currentViewport.y) / currentViewport.k;
+            const nextViewport = {
+                x: mouseX - worldX * newScale,
+                y: mouseY - worldY * newScale,
+                k: newScale,
+            };
+
+            viewportRef.current = nextViewport;
+            onViewportChange(nextViewport);
         });
     };
 
@@ -122,8 +142,8 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
                 isPanning: true,
                 startX: event.clientX,
                 startY: event.clientY,
-                initialX: viewport.x,
-                initialY: viewport.y,
+                initialX: viewportRef.current.x,
+                initialY: viewportRef.current.y,
                 hasMoved: false,
                 startedOnBackground: isBackgroundClick,
             };
