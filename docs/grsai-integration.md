@@ -1,6 +1,6 @@
 # Grsai 渠道集成笔记（实测 + 故障判定）
 
-> 调用链：插件 `generate()` → `web/src/pages/canvas/hooks/use-plugin-host.tsx:54` → `web/src/services/api/image.ts:793 requestEdit`（有参考图）→ `web/src/services/api/model-plugin.ts:113 runModelPlugin`（沙箱执行渠道脚本）→ `model-plugin.ts:50 axios POST /v1/api/generate` → 脚本内 `poll()` 轮询 `GET /v1/api/result?id=`。
+> 调用链：插件 `generate()` → `web/src/pages/canvas/hooks/use-plugin-host.tsx` → `web/src/services/api/image.ts` 的 `requestEdit`（有参考图）→ `web/src/services/api/model-plugin.ts` 的 `runModelPlugin`（以 `new Function` 执行用户配置脚本，不是安全隔离沙箱）→ HTTP 请求 → 脚本内 `poll()` 轮询结果。
 > 渠道脚本原文见 `docs/assets/grsai-autodl-canvas-config.json`（发行版）；**浏览器里跑的是导入时的快照**，改 json 后必须重导入才生效（URL 安装的插件同理，用安装时持久化的 `source`，见 `plugin-loader.ts:107`）。
 
 ## 1 接口行为

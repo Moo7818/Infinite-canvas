@@ -1,11 +1,11 @@
-# 节点插件开发指南（上游 v0.18.0 实测）
+# 节点插件开发指南（对照产品 v0.19.0；改动前核对当前 SDK）
 
 > 插件 = 一个 ESM bundle（默认导出 `CanvasPlugin` 对象或工厂函数），宿主以 `Blob → import()` 动态评估加载。
-> 批量开发插件**不需要改上游源码**，是二次开发成本最低的路径。
+> 插件优先通常能减少宿主耦合；遇到 SDK 表达不了的能力，先评估宿主契约扩展，再决定是否改上游代码。
 
 ## 1 契约（作者唯一 API）
 
-* 公开契约 `infinite-canvas/plugins/canvas/sdk/src/types.ts:1`（自包含镜像，源头为宿主 `web/src/types/canvas-plugin.ts`；宿主改契约需同步 SDK）。
+* 插件侧契约 `infinite-canvas/plugins/canvas/sdk/src/types.ts` 是宿主 `web/src/types/canvas-plugin.ts` 的自包含镜像；契约变更要同步两处并核对现有插件。
 * 作者入口 `infinite-canvas/plugins/canvas/sdk/src/define-plugin.ts:1`：`definePlugin({id, name, version, nodes})` 或工厂 `(runtime) => ({...})`。
 * 节点类型全局唯一，约定 `"<pluginId>:<name>"`（如 `svg:vector`）；宿主以开放字符串接纳（`infinite-canvas/web/src/types/canvas.ts:21`）。
 
@@ -17,7 +17,7 @@
 | 加载 | `web/src/lib/canvas/plugin-loader.ts:11/31` | Blob URL + `@vite-ignore` import，取 `default ?? plugin`；非法导出/缺字段抛 `pluginErrors.*` |
 | 运行时 | `web/src/lib/canvas/plugin-runtime.ts:28` | 单例 React + `injectCSS` + 事件总线；**插件不准自带 React**（esbuild external） |
 | ctx 组装 | `web/src/lib/canvas/plugin-node-context.ts:9` | 每次渲染注入 `CanvasNodeContext` |
-| AI 桥接 | `web/src/pages/canvas/hooks/use-plugin-host.tsx:42` | `ctx.ai` 复用宿主渠道；**插件拿不到 Key**，未配置时宿主弹配置窗 |
+| AI 桥接 | `web/src/pages/canvas/hooks/use-plugin-host.tsx` | `ctx.ai` 复用宿主渠道；Key 不由 ctx 参数传给插件，未配置时宿主提示配置 |
 | 持久化 | `web/src/stores/canvas/use-plugin-store.ts:6` | 源码缓存支持离线，localforage 持久化 |
 
 ## 3 `ctx` 能力
@@ -27,7 +27,7 @@
 通信：`emit/on`；AI：`ai.generateImage/generateVideo/generateText + listModels/defaultModel`；
 面板：`openPanel/closePanel`；私有 KV：`storage`（按插件 id 隔离）；主题：`theme/scale/isSelected`。
 
-## 4 节点定义开关（`sdk/src/types.ts:267`）
+## 4 节点定义开关（以当前 SDK 类型为准）
 
 * `Content/Panel/toolbar/onDoubleClick`：渲染三件套；`interactionToggle: true` 时宿主自动拼「交互⇄移动」开关。
 * `useBuiltinPanel: {mode, promptPrefix?, writeBackToSelf?}`：零成本复用宿主生成面板，与自定义 `Panel` 二选一。
@@ -42,7 +42,7 @@
 4. 官方发布：`registry/build.mjs` 的 `OFFICIAL` 登记，`package.json version` 单一真源 → 打 `v*` tag → CI 强推 `plugins-dist` 分支 → jsDelivr 拉清单（见 `registry/README.md`）。**第三方插件不走此流程，用户填 JS URL 安装**。
 5. 四态：URL 安装（替换旧版）/ 启用禁用（local 启用时重拉）/ 更新（bust 缓存）/ 卸载（先 deactivate 再删记录）。
 
-## 6 现有 5 插件模式（新插件先对号入座）
+## 6 上游插件模式参考
 
 `markdown` 文本渲染；`svg` 透明背景 + 双击编辑 + 上游源码自动采用 + `pointerEvents:none` 拖拽穿透；
 `html` 沙箱 iframe + `{{input}}` 上游注入；`panorama` 交互/移动切换 + 面板前缀约束；`sticky-note` 颜色 + 双击编辑。
@@ -53,20 +53,23 @@
 * 只用 `ctx.theme` 取色；操作按钮扁平无底色（见 `agents/canvas-ui.md`）；交互控件加 `data-canvas-no-zoom` 并阻止冒泡。
 * 状态放 `metadata`（扁平字段袋，生成/连线体系可读）；跨会话私有数据放 `ctx.storage`。
 * 需生成能力直接调 `ctx.ai`，不自接接口；`system` 提示词插件自拼。
-* 安全：远端源码即不可信；`dangerouslySetInnerHTML` 仅用于可信内容，HTML 类走沙箱 iframe；`setup` 返回 cleanup；事件名加插件前缀。
-* 每插件独立 `feature/plugin-<id>` 分支，模板自带 `typecheck`；`CHANGELOG Unreleased` 一句话。
+* 安全：远端源码即不可信；`dangerouslySetInnerHTML` 仅用于可信内容，HTML 类内容使用有明确限制的 iframe；`setup` 返回 cleanup；事件名加插件前缀。
+* 插件分支按仓库策略命名 `feature/<topic>`；产品可见改动记产品 CHANGELOG。验证按用户要求和任务约定执行，报告是否运行及结果。
 
-## 8 实战沉淀（四自研插件：character/scene/prop/grid）
+## 8 自研插件经验（character/scene/prop/grid/video）
 
 * **metadata 命名空间**：新字段带插件前缀（如 `sceneTime`），`name/model/versions/content` 等通用键与宿主混居，未来撞车风险由本约定规避；`content` 作通用输出位是有意的，保留。
-* **错误分类**：现状靠消息正则（脆弱且 locale 相关）；目标是宿主 `readAxiosError` 保留 `error.code`（`ERR_NETWORK/ECONNABORTED/ERR_CANCELED`），插件判 `error.code`。需宿主支持，见 roadmap。
-* **读改写竞态**：`ctx.node` 是渲染快照，`versions` 追加存在后完成者覆盖风险；现状靠单 flight 互斥兜底，目标是宿主 `updateMetadata` 函数式重载。见 roadmap。
+* **错误分类**：当前插件错误处理中仍有按消息文本判断的路径，容易受文案和语言影响；优先使用宿主保留的 `error.code`（如 `ERR_NETWORK/ECONNABORTED/ERR_CANCELED`），缺失时再回退显示消息。
+* **读改写竞态**：`ctx.node` 是渲染快照。宿主 `updateMetadata` 已支持函数式更新；对追加列表等依赖最新值的读改写使用函数式重载，避免闭包快照覆盖。
 * **生成态三件套**：内存互斥 Map（同步检查占用）+ `metadata.generating` 持久 + 刷新中断显式标记（真续跑需 taskId 落盘，见 roadmap）；取消走模块级 `AbortController`。
 * **版本存储**：dataURL 全量进 metadata 会膨胀（2K 单张 5–10MB）；目标是宿主暴露 `storeImage`，metadata 只存 key。见 roadmap。
-* **MODEL_ALLOW**：硬编码是临时方案；目标是放开全量或存 metadata 由用户勾选。见 roadmap。
+* **模型筛选**：自研生成插件已有 `metadata.modelAllow` 覆盖默认 `MODEL_ALLOW` 的能力；是否增加可发现的 UI 仍待评估，不要说成尚不可配置。
 * **脚本超时**：`http` helper 不支持 timeout（见 minimax 脚本改用 `request` 的先例）；生图脚本建任务步同样切 `request({..., timeout: 30000})`，早失败早提示。见 roadmap。
 * **幂等头**：POST 带 `X-Request-Id`，上游未承诺也无害，并作为推动其支持幂等键的依据。
 * **双重标注**：宿主 `requestEdit` 会给 prompt 加"参考图片编号…"前缀，与插件自拼的"（环境参考图片1、2）"语义一致（`toReferences` 保序），仅冗余，无冲突。
-* **构建取证**：`build.mjs` 开 `keepNames`（`{ esbuild: { keepNames: true } }`），dev key 告警直接可读；`definePlugin` 的 version 是运行时唯一 fresh 信号，修完即升 patch。
-* **共享代码包**（已落地）：`plugins/canvas/shared`（`versions/media/fields/generation/imports/ui`），各插件 `file:../shared` 引用随 bundle 打包；`useGenerationGuard`（同步互斥+取消）、函数式 versions 追加、FieldGroup/ImagesField/PresetSelect 走共享，提示词拼装与字段归一化留各插件（Panel schema 驱动是下一步）。
-* **构建取证**：`build.mjs` 开 `keepNames`（`{ esbuild: { keepNames: true } }`），dev key 告警直接可读；`definePlugin` 的 version 是运行时唯一 fresh 信号，修完即升 patch（package.json 同步）。
+* **共享代码包**（已落地）：`plugins/canvas/shared`（`versions/media/fields/generation/imports/ui`），插件通过 `file:../shared` 引用并随 bundle 打包，不独立发布。共享稳定通用能力；提示词拼装、业务流程与业务状态策略留各插件。
+* **构建取证**：`build.mjs` 保留可读函数名以便定位运行时告警；各插件 `package.json` 版本与 `definePlugin` 版本保持一致。源码有发布变化时同步提升插件版本，避免缓存继续使用旧 bundle。
+
+## 安全边界
+
+URL 安装的插件通过 Blob 动态导入，运行在应用页面的 JavaScript 环境中，并非 iframe 沙箱。`ctx` 不暴露 API Key 只是 SDK 接口约束，不能阻止插件访问页面本身可访问的数据或浏览器 API。只安装自己审过或明确信任的源码；更新插件时重新检查来源和差异。自定义模型脚本也属于可执行代码，宿主通过 `new Function` 执行，不应描述为具备安全隔离的沙箱。

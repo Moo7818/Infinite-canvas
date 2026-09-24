@@ -2,6 +2,7 @@
 
 > 上游用户文档原文在 `infinite-canvas/docs/content/docs/`（中英双版 `.mdx`），文档站索引 `infinite-canvas/docs/index.md:1`。
 > 本层只给二次开发者一句话指路；细节读原文。
+> 当前 vendor copy 的上游代码基线为 v0.19.0（commit `dab19adc0847e32e39b7fc8ff90cb392561fb826`）；`infinite-canvas/VERSION` 为本仓库 v0.19.0 产品记录。同步新上游后同时更新此基线和 `docs/git-branch-strategy.md`。
 
 ## 概览 `overview/`
 

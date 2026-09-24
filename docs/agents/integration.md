@@ -1,7 +1,13 @@
 # 集成指引（二次开发优先顺序）
 
-1. **节点插件优先**：`infinite-canvas/plugins/canvas/sdk/src/define-plugin.ts:1` 定义插件，`"<pluginId>:<name>"` 类型（`types/canvas.ts:21`），经 `node-registry.ts` 注册；远端 URL 动态安装/启用/更新/卸载。
-2. **模型渠道次之**：新中转先写自定义调用脚本（`services/api/model-plugin.ts` 注入 `http/poll/sleep/signal/onDelta/onProgress`），跑通再进 `use-config-store.ts` 预设。
-3. **改上游源码最后**：保持改动面最小，沿用 `canvas-agent-ops.ts:7` 同一套操作语义；画布节点渲染改 `components/canvas/canvas-node.tsx`，生成链路改 `canvas-node-generation.ts`。
-4. **本地 Agent**：`canvas-agent/src/server/http.ts:18`（`127.0.0.1:17371`）+ `src/canvas/session.ts`；前端经 `services/api/canvas-agent.ts`。
-5. **跨域**：浏览器直连被拦时用自建转发或 `canvas-proxy`，不假设项目后端。
+1. **先判断改动归属**：自研节点优先放 `infinite-canvas/plugins/canvas/<id>/`，共享能力放 `plugins/canvas/shared/`；宿主契约以 `plugins/canvas/sdk/` 为插件侧入口。上游自带插件、模板、SDK 与注册器不可默认视为自研。
+2. **渠道适配其次**：先评估现有 API 与自定义模型脚本（`web/src/services/api/model-plugin.ts`），只在脚本无法表达且需求稳定时增加产品级预设。
+3. **宿主改动需证明必要**：只有插件 SDK/脚本无法安全表达需求时才改 `web/src`；修改前定位调用链和既有操作语义，改动后记录受影响文件与上游同步风险。插件宿主契约变更须同步 `plugins/canvas/sdk/`。
+4. **本地 Agent**：服务入口在 `canvas-agent/src/server/http.ts`，会话与操作在 `src/canvas/`；前端适配在 `web/src/services/api/canvas-agent.ts`。涉及协议时同时核对两端和测试夹具。
+5. **跨域与服务端**：默认浏览器直连用户配置的服务；确有 CORS 或密钥代理需求时优先评估 `canvas-proxy`，不得默认引入项目后端或第三方中转。
+
+## 改动决策记录
+
+* 改上游宿主代码时，在 PR/提交说明中写明需求、为何插件层不能解决、涉及路径、上游基线和验证范围；不要把大段上游实现复制进根文档。
+* 共享包只收多个自研插件都需要且接口稳定的通用能力；单插件提示词、业务流程和状态策略留在插件内。
+* 若插件契约变化会影响独立构建或远端安装，检查 SDK 类型镜像、构建 external 配置、最低宿主版本与插件版本策略。

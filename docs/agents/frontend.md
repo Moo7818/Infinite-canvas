@@ -1,4 +1,4 @@
-# 前端规范（上游 v0.18.0 实测）
+# 前端规范（当前产品技术栈；上游基线 v0.19.0）
 
 * 技术栈：Vite 7、React 19、React Router 7、TypeScript、Ant Design 6、Tailwind 4、Zustand 5（`infinite-canvas/web/package.json:14`）。
 * Antd 代码参考 `https://ant.design/llms-full.txt`，并结合当前版本与既有写法。
