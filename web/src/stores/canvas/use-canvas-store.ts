@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
+import localforage from "localforage";
 
 import { nanoid } from "nanoid";
 import i18n from "@/i18n";
@@ -41,16 +42,59 @@ type CanvasStore = {
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
 const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
+const CANVAS_STORAGE_VERSION = 1;
 type PersistedCanvasState = Pick<CanvasStore, "projects" | "deletedProjects">;
+type CanvasStorageMeta = { version: number; projectIds: string[]; deletedProjects: CanvasDeletedProject[] };
+const projectStore = localforage.createInstance({ name: "infinite-canvas", storeName: "canvas_projects" });
+const metaStore = localforage.createInstance({ name: "infinite-canvas", storeName: "canvas_meta" });
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let queuedPersistState: PersistedCanvasState | null = null;
+let persistedProjects = new Map<string, CanvasProject>();
+let persistedProjectIds = new Set<string>();
+let writeQueue: Promise<void> = Promise.resolve();
+
+async function readSplitState(): Promise<StorageValue<CanvasStore> | null> {
+    const meta = await metaStore.getItem<CanvasStorageMeta>("state");
+    if (!meta || meta.version !== CANVAS_STORAGE_VERSION) return null;
+    const projects = (await Promise.all(meta.projectIds.map((id) => projectStore.getItem<CanvasProject>(id)))).filter((project): project is CanvasProject => Boolean(project));
+    if (projects.length !== meta.projectIds.length) return null;
+    return { state: { projects, deletedProjects: meta.deletedProjects } as CanvasStore, version: 0 };
+}
+
+async function migrateLegacyState(name: string, legacy: StorageValue<CanvasStore>) {
+    await Promise.all(legacy.state.projects.map((project) => projectStore.setItem(project.id, project)));
+    await metaStore.setItem<CanvasStorageMeta>("state", { version: CANVAS_STORAGE_VERSION, projectIds: legacy.state.projects.map((project) => project.id), deletedProjects: legacy.state.deletedProjects });
+    persistedProjects = new Map(legacy.state.projects.map((project) => [project.id, project]));
+    persistedProjectIds = new Set(legacy.state.projects.map((project) => project.id));
+    void name;
+}
+
+async function flushSplitState(name: string, state: PersistedCanvasState) {
+    const nextIds = new Set(state.projects.map((project) => project.id));
+    await Promise.all(state.projects.filter((project) => persistedProjects.get(project.id) !== project).map((project) => projectStore.setItem(project.id, project)));
+    await Promise.all(Array.from(persistedProjectIds).filter((id) => !nextIds.has(id)).map((id) => projectStore.removeItem(id)));
+    await metaStore.setItem<CanvasStorageMeta>("state", { version: CANVAS_STORAGE_VERSION, projectIds: state.projects.map((project) => project.id), deletedProjects: state.deletedProjects });
+    persistedProjects = new Map(state.projects.map((project) => [project.id, project]));
+    persistedProjectIds = nextIds;
+    void name;
+}
 
 const canvasStorage: PersistStorage<CanvasStore> = {
     getItem: async (name) => {
+        const splitState = await readSplitState().catch(() => null);
+        if (splitState) {
+            queuedPersistState = splitState.state as PersistedCanvasState;
+            persistedProjects = new Map(splitState.state.projects.map((project) => [project.id, project]));
+            persistedProjectIds = new Set(splitState.state.projects.map((project) => project.id));
+            return splitState;
+        }
         const value = await localForageStorage.getItem(name);
         if (!value) return null;
         const parsed = JSON.parse(value) as StorageValue<CanvasStore>;
         queuedPersistState = parsed.state as PersistedCanvasState;
+        persistedProjects = new Map(parsed.state.projects.map((project) => [project.id, project]));
+        persistedProjectIds = new Set(parsed.state.projects.map((project) => project.id));
+        writeQueue = writeQueue.then(() => migrateLegacyState(name, parsed));
         return parsed;
     },
     setItem: (name, value) => {
@@ -60,10 +104,16 @@ const canvasStorage: PersistStorage<CanvasStore> = {
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
             saveTimer = null;
-            void localForageStorage.setItem(name, JSON.stringify(value));
+            writeQueue = writeQueue.then(() => flushSplitState(name, nextState)).catch(() => localForageStorage.setItem(name, JSON.stringify({ state: nextState, version: 0 })));
         }, 400);
     },
-    removeItem: (name) => localForageStorage.removeItem(name),
+    removeItem: async (name) => {
+        await localForageStorage.removeItem(name);
+        await metaStore.removeItem("state");
+        await Promise.all(Array.from(persistedProjectIds).map((id) => projectStore.removeItem(id)));
+        persistedProjects.clear();
+        persistedProjectIds.clear();
+    },
 };
 
 export const useCanvasStore = create<CanvasStore>()(
