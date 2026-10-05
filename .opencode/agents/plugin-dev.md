@@ -6,20 +6,23 @@ permission:
   edit:
     "*": deny
     "infinite-canvas/plugins/canvas/**": allow
+  read: allow
+  glob: allow
+  grep: allow
+  list: allow
   bash:
-    "*": ask
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "node build.mjs*": allow
-    "npm run build": allow
-    "npm run dev": allow
-    "tsc --noEmit": allow
+    # 宽规则在前默认放行，窄规则在后收紧（opencode 取最后一条匹配）。
+    "*": allow
     "git add*": deny
     "git commit*": deny
     "git checkout*": deny
     "git merge*": deny
     "git push*": deny
+    "git pull*": deny
+    "git rebase*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git stash drop*": deny
     "*--force*": deny
 ---
 

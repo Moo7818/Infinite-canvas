@@ -4,6 +4,10 @@ mode: primary
 temperature: 0.2
 color: primary
 permission:
+  read: allow
+  glob: allow
+  grep: allow
+  list: allow
   task:
     "*": deny
     "explore": allow

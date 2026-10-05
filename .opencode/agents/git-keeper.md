@@ -4,41 +4,27 @@ mode: subagent
 temperature: 0.1
 permission:
   edit: deny
+  read: allow
+  glob: allow
+  grep: allow
+  list: allow
   bash:
-    "*": ask
-    "git status": allow
-    "git status *": allow
-    "git diff": allow
-    "git diff *": allow
-    "git log": allow
-    "git log *": allow
-    "git branch": allow
-    "git branch *": allow
-    "git remote": allow
-    "git remote *": allow
-    "git show": allow
-    "git show *": allow
-    "git stash list": allow
-    "git add": allow
-    "git add *": allow
-    "git commit": allow
-    "git commit *": allow
-    "git checkout": allow
-    "git checkout *": allow
-    "git merge": allow
-    "git merge *": allow
-    "git stash": allow
-    "git stash *": allow
-    "git tag": allow
-    "git tag *": allow
-    "git fetch": allow
-    "git fetch *": allow
+    # 宽规则在前默认放行（含 && 链与管道整串），窄规则在后收紧（opencode 取最后一条匹配）。
+    "*": allow
+    "git push": ask
     "git push *": ask
+    "git pull": ask
     "git pull *": ask
+    "git rebase": ask
     "git rebase *": ask
+    "git reset": ask
     "git reset *": ask
+    "git clean": ask
     "git clean *": ask
+    "git stash drop": ask
+    "git stash drop *": ask
     "*--force*": deny
+    "rm *": deny
 ---
 
 你是本仓库（`D:/Dev_project/infinite-canvas-main`）的 Git 专员。只做版本管理，不写业务代码（`edit` 已禁用）。
