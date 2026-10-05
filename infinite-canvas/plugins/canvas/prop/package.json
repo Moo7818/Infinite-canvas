@@ -1,6 +1,6 @@
 {
     "name": "canvas-plugin-prop",
-    "version": "1.0.1",
+    "version": "1.0.3",
     "private": true,
     "type": "module",
     "description": "Infinite Canvas 道具节点插件：道具表单 → 拼装提示词 → 参考图生成道具图",
@@ -13,6 +13,7 @@
         "@infinite-canvas/plugin-sdk": "file:../sdk",
         "@types/react": "19.1.12",
         "react": "19.2.5",
-        "typescript": "^5"
+        "typescript": "^5",
+        "canvas-plugin-shared": "file:../shared"
     }
 }

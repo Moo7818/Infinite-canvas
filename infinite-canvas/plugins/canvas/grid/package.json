@@ -1,6 +1,6 @@
 {
     "name": "canvas-plugin-grid",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "private": true,
     "type": "module",
     "description": "Infinite Canvas 宫格调度节点插件：2*2四宫格，按名引用角色/空间节点，调度文档拼装提示词一次生成四帧静帧",
@@ -13,6 +13,7 @@
         "@infinite-canvas/plugin-sdk": "file:../sdk",
         "@types/react": "19.1.12",
         "react": "19.2.5",
-        "typescript": "^5"
+        "typescript": "^5",
+        "canvas-plugin-shared": "file:../shared"
     }
 }

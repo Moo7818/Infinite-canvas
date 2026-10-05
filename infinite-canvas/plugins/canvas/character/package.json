@@ -1,6 +1,6 @@
 {
     "name": "canvas-plugin-character",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "private": true,
     "type": "module",
     "description": "Infinite Canvas 角色节点插件：角色表单 → 拼装提示词 → 参考图生成角色设定图",
@@ -11,6 +11,7 @@
     },
     "devDependencies": {
         "@infinite-canvas/plugin-sdk": "file:../sdk",
+        "canvas-plugin-shared": "file:../shared",
         "@types/react": "19.1.12",
         "react": "19.2.5",
         "typescript": "^5"

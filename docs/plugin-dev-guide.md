@@ -68,4 +68,5 @@
 * **幂等头**：POST 带 `X-Request-Id`，上游未承诺也无害，并作为推动其支持幂等键的依据。
 * **双重标注**：宿主 `requestEdit` 会给 prompt 加"参考图片编号…"前缀，与插件自拼的"（环境参考图片1、2）"语义一致（`toReferences` 保序），仅冗余，无冲突。
 * **构建取证**：`build.mjs` 开 `keepNames`（`{ esbuild: { keepNames: true } }`），dev key 告警直接可读；`definePlugin` 的 version 是运行时唯一 fresh 信号，修完即升 patch。
-* **共享代码方向**：四插件约 80% 重复（ImagesField/PresetSelect/版本条/防重样板等），目标抽 `plugins/canvas/shared`，三 Panel 演进为 schema 驱动单实现。见 roadmap。
+* **共享代码包**（已落地）：`plugins/canvas/shared`（`versions/media/fields/generation/imports/ui`），各插件 `file:../shared` 引用随 bundle 打包；`useGenerationGuard`（同步互斥+取消）、函数式 versions 追加、FieldGroup/ImagesField/PresetSelect 走共享，提示词拼装与字段归一化留各插件（Panel schema 驱动是下一步）。
+* **构建取证**：`build.mjs` 开 `keepNames`（`{ esbuild: { keepNames: true } }`），dev key 告警直接可读；`definePlugin` 的 version 是运行时唯一 fresh 信号，修完即升 patch（package.json 同步）。

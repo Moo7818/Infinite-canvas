@@ -1,10 +1,26 @@
 // 宫格调度节点:锁死 2*2 四格，按名引用角色/空间节点，调度文档拼装提示词，一次生成四帧静帧。
 // 图片全部活引用（取所选节点当前选中版本图）；生成结果自动追加版本并写回本节点展示;下游输出当前选中版本图。
 import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
-import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
-import type { ReactNode } from "react";
+import type { CanvasNodeContentProps, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
+import {
+    FieldGroup,
+    activeImageUrl,
+    downloadImage,
+    downscaleImage,
+    fitNodeToImage,
+    imageDims,
+    importFilesAsVersions,
+    nextAfterDelete,
+    pickActiveId,
+    pickImageFiles,
+    resolveVersions,
+    useGenerationGuard,
+    versionAppendPatch,
+    versionFilename,
+} from "canvas-plugin-shared";
+import type { VersionItem } from "canvas-plugin-shared";
 
-export const PROMPT_PREFIX = "2*2四宫格人物调度图：同一固定机位一次生成四帧人物调度静帧，按调度文档执行。";
+export const PROMPT_PREFIX = "2*2四宫格。";
 // 机位锁定：不可编辑，作用于全部四格。
 export const LOCKED_CAMERA = "固定机位空间斜上方45度俯拍，广角，光线自然，照片级写实，电影级光影";
 
@@ -17,24 +33,7 @@ export type GridFields = {
     doc?: string;
 };
 
-export type GridVersion = {
-    id: string;
-    image: string;
-    prompt: string;
-    createdAt: string;
-};
-
-function newVersionId(): string {
-    return `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-}
-
-// 当前展示图：选中版本 > 旧版 content（未迁移的老节点）
-function activeImage(m: CanvasNodeMetadata): string {
-    const versions = Array.isArray(m.versions) ? (m.versions as GridVersion[]) : [];
-    const active = versions.find((v) => v && v.id === m.activeVersionId) || versions[versions.length - 1];
-    if (active?.image) return active.image;
-    return typeof m.content === "string" ? m.content : "";
-}
+export type GridVersion = VersionItem;
 
 // 节点自带图：内置图片节点与三自有节点都把图同步到 metadata.content。
 function nodeImage(n: CanvasNodeData): string[] {
@@ -94,21 +93,24 @@ function collectRefs(characters: GridResolvedCell[], spaceImages: string[]): str
 export function buildGridPrompt(f: { name?: string; doc?: string; characters: GridResolvedCell[]; spaceName?: string; spaceImages: string[] }): { prompt: string; references: string[] } {
     const references = collectRefs(f.characters, f.spaceImages || []);
     const pos = (img: string) => references.indexOf(img) + 1;
-    const mark = (imgs: string[]) => (imgs.length ? `（图片${imgs.map(pos).join("、")}）` : "");
+    const mark = (imgs: string[]) => (imgs.length ? `图片${imgs.map(pos).join("、")}` : "");
 
+    // 紧凑格式（对标高效原版）：无标签无元指令，一气呵成。
+    // 2*2四宫格。苏：图片1，林：图片2，空间：图片3。统一机位：…。<调度正文>
     const parts: string[] = [PROMPT_PREFIX];
-    if (f.name?.trim()) parts.push(`调度主题：${f.name.trim()}。`);
-    const cast = f.characters
-        .map((c) => (c.name ? `${c.name}${mark(c.images)}` : ""))
-        .filter(Boolean)
-        .join("、");
-    if (cast) parts.push(`出场：${cast}。`);
-    if (f.spaceName?.trim() || (f.spaceImages || []).length) {
-        parts.push(`空间：${f.spaceName?.trim() || ""}${mark(f.spaceImages || [])}。`);
+    const headed: string[] = [];
+    for (const c of f.characters) {
+        if (!c.name) continue;
+        headed.push(c.images.length ? `${c.name}：${mark(c.images)}` : c.name);
     }
-    parts.push(`各宫格机位统一：${LOCKED_CAMERA}。`);
+    if (f.spaceName?.trim() || (f.spaceImages || []).length) {
+        const sImgs = f.spaceImages || [];
+        headed.push(sImgs.length ? `空间：${mark(sImgs)}` : `空间：${f.spaceName?.trim() || ""}`);
+    }
+    if (headed.length) parts.push(`${headed.join("，")}。`);
+    parts.push(`统一机位：${LOCKED_CAMERA}。`);
     const docText = f.doc?.trim() || "";
-    if (docText) parts.push(`调度：${docText}${/[。？！？!]$/.test(docText) ? "" : "。"}`);
+    if (docText) parts.push(docText);
     return { prompt: parts.join(""), references };
 }
 
@@ -162,16 +164,6 @@ function filledCount(m: CanvasNodeMetadata, cast: GridCast): number {
     return textCount + spaceCount + castCount;
 }
 
-function readImageFile(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-    });
-}
-
-// 展开步图片仅供 LLM 阅读理解（看清人/景即可），压到 768 转 JPEG；成图引用仍用原图，不影响输出质量。
 async function shrinkForReading(src: string, maxEdge = 768): Promise<string> {
     if (!src.startsWith("data:image/")) return src;
     try {
@@ -196,76 +188,11 @@ async function shrinkForReading(src: string, maxEdge = 768): Promise<string> {
     }
 }
 
-function imageDims(src: string): Promise<{ w: number; h: number }> {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 });
-        img.onerror = () => resolve({ w: 1, h: 1 });
-        img.src = src;
-    });
-}
-
-// 在途生成的取消器：模块常驻，面板开关不影响；刷新后 Map 为空，靠 generating 残留自愈。
-const runningControllers = new Map<string, AbortController>();
-
-// 导入图片新增版本：面板与工具条共用；失败抛错由调用方展示。
-async function importFilesAsVersions(ctx: CanvasNodeContext, files: File[]): Promise<void> {
-    if (!files.length) return;
-    const urls = await Promise.all(files.map((f) => readImageFile(f)));
-    const m = ctx.node.metadata || {};
-    const cast = resolveCast(ctx.getNodes(), m);
-    const { prompt } = buildGridPrompt({ ...(m as GridFields), characters: cast.characters, spaceName: cast.spaceName, spaceImages: cast.spaceImages });
-    const added: GridVersion[] = urls.map((url) => ({ id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() }));
-    const last = added[added.length - 1];
-    const d = await imageDims(last.image);
-    const imgH = Math.min(520, Math.max(200, Math.round((300 * d.h) / d.w)));
-    ctx.updateNode({ width: 300, height: imgH + 30 });
-    ctx.updateMetadata((prev) => {
-        const cur = (Array.isArray(prev.versions) ? (prev.versions as GridVersion[]) : []).filter((v) => v && v.image);
-        const next = [...cur, ...added];
-        return { versions: next, activeVersionId: last.id, content: last.image, status: "success", generating: false, generateError: undefined };
-    });
-}
-
-// 工具条调起系统文件选择框（工具条项无 DOM 插槽，只能动态创建 input）。
-function pickImageFiles(onFiles: (files: File[]) => void): void {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.multiple = true;
-    input.onchange = () => {
-        const files = Array.from(input.files || []);
-        if (files.length) onFiles(files);
-    };
-    input.click();
-}
-
-// 下载选中版本：dataURL 直下；远端 URL 先抓成 blob（跨域失败时抛错提示）。
-async function downloadImage(url: string, filename: string): Promise<void> {
-    let tmp = "";
-    try {
-        let href = url;
-        if (/^https?:\/\//i.test(url)) {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`下载失败（${res.status}）`);
-            tmp = URL.createObjectURL(await res.blob());
-            href = tmp;
-        }
-        const a = document.createElement("a");
-        a.href = href;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-    } finally {
-        if (tmp) setTimeout(() => URL.revokeObjectURL(tmp), 5000);
-    }
-}
-
 function GridContent({ ctx }: CanvasNodeContentProps) {
     const m = ctx.node.metadata || {};
-    const result = activeImage(m);
-    const versions = Array.isArray(m.versions) ? (m.versions as GridVersion[]) : [];
+    const result = activeImageUrl(m);
+    const previewOpen = Boolean(m.previewOpen) && result !== "";
+    const versions = resolveVersions(m);
     const count = filledCount(m, resolveCast(ctx.getNodes(), m));
     return (
         <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", pointerEvents: "none", color: ctx.theme.node.text }}>
@@ -295,26 +222,15 @@ function GridContent({ ctx }: CanvasNodeContentProps) {
     );
 }
 
-function FieldGroup({ title, children, theme }: { title: string; children: ReactNode; theme: CanvasNodeContentProps["ctx"]["theme"] }) {
-    return (
-        <div style={{ border: `1px solid ${theme.node.stroke}`, borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: theme.node.text, display: "flex", alignItems: "center" }}>
-                <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: "#8b5cf6", marginRight: 6 }} />
-                {title}
-            </div>
-            {children}
-        </div>
-    );
-}
-
 function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const m = ctx.node.metadata || {};
-    // 生成态持久化：generating 进 metadata，关面板重开不丢失；在途请求靠模块级取消器接管。
-    const [running, setRunning] = useState(Boolean((ctx.node.metadata || {}).generating));
+    // 生成态经共享 guard 持久化；在途请求靠模块级取消器接管。
+    const guard = useGenerationGuard(ctx);
+    const { running, setRunning } = guard;
     useEffect(() => {
         // 兜底：generating 为真但本会话无在途请求（刷新/崩溃残留）。
         // 请求无法续跑（任务 id 随旧页面销毁），标记为中断而不是静默清空，让用户知道发生了什么。
-        if ((ctx.node.metadata || {}).generating && !runningControllers.has(ctx.node.id)) {
+        if ((ctx.node.metadata || {}).generating && !guard.isLive()) {
             ctx.updateMetadata({ generating: false, generateError: "页面刷新导致生成中断，后台任务状态未知；如需结果请重新生成。" });
             setRunning(false);
         }
@@ -370,27 +286,21 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const select = { ...input, background: ctx.theme.toolbar.panel, fontWeight: 600 } as const;
     const lab = { fontSize: 13, fontWeight: 600, color: ctx.theme.node.text } as const;
     const btn = { padding: "6px 14px", borderRadius: 8, border: `1px solid ${ctx.theme.node.stroke}`, background: ctx.theme.toolbar.panel, color: ctx.theme.node.text, cursor: "pointer", fontSize: 13 } as const;
-    const versions = (Array.isArray(m.versions) ? (m.versions as GridVersion[]) : []).filter((v) => v && v.image);
-    const activeId = versions.some((v) => v.id === m.activeVersionId) ? (m.activeVersionId as string) : versions[versions.length - 1]?.id;
+    const versions = resolveVersions(m);
+    const activeId = pickActiveId(versions, m.activeVersionId);
 
-    // 节点宽高自适应图片比例：宽固定 300，图高按比例换算后夹紧，+30 留给底部状态条。
-    const fitNode = async (url: string) => {
-        const d = await imageDims(url);
-        const imgH = Math.min(520, Math.max(200, Math.round((300 * d.h) / d.w)));
-        ctx.updateNode({ width: 300, height: imgH + 30 });
-    };
+    const fitNode = (url: string) => fitNodeToImage((p) => ctx.updateNode(p), url);
 
-    const cancel = () => runningControllers.get(ctx.node.id)?.abort();
+    const cancel = () => guard.cancel();
 
     const generate = async () => {
-        // 防重复提交：Map 检查与占用是同步代码，不存在竞态；running/metadata 只做 UI 与跨面板持久。
-        if (runningControllers.has(ctx.node.id)) {
-            console.debug("[grid] 重复提交已拦截");
+        // 防重复提交：共享 guard 同步检查与占用，不存在竞态；running/metadata 只做 UI 与跨面板持久。
+        const controller = guard.begin();
+        if (!controller) return;
+        if (running || Boolean((ctx.node.metadata || {}).generating)) {
+            guard.end();
             return;
         }
-        if (running || Boolean((ctx.node.metadata || {}).generating)) return;
-        const controller = new AbortController();
-        runningControllers.set(ctx.node.id, controller);
         setRunning(true);
         setError("");
         set({ generating: true, generateError: undefined, expandError: undefined });
@@ -418,20 +328,15 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
             const { prompt } = buildGridPrompt({ ...fields, doc: expanded });
             // 宫格默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
             console.info(`[grid] 提交生成 参考图${references.length}张${expanded ? "" : "（调度展开回退原文）"}`);
-            const res = await ctx.ai.generateImage(prompt, { references, model: chosen, size: "16:9", signal: controller.signal });
+            // 引用图压到 1536：边缘 413 拒收 10MB 级 body，只压引用，输出不动。
+            const refs = await Promise.all(references.map((u) => downscaleImage(u)));
+            const res = await ctx.ai.generateImage(prompt, { references: refs, model: chosen, size: "16:9", signal: controller.signal });
             if (!res.images.length) throw new Error("生成未返回图片");
             const url = res.images[0];
             await fitNode(url);
             // 每次生成自动追加为新版本并选中；老节点首次生成时把旧图收为版本 1。
-            const ver: GridVersion = { id: newVersionId(), image: url, prompt, createdAt: new Date().toISOString() };
             // 函数式追加：与工具条导入并发时以前面最新 state 为准，不丢更新。
-            set((prev) => {
-                const cur = (Array.isArray(prev.versions) ? (prev.versions as GridVersion[]) : []).filter((v) => v && v.image);
-                const base =
-                    !cur.length && typeof prev.content === "string" && prev.content ? [{ id: newVersionId(), image: prev.content, prompt: "", createdAt: "" }, ...cur] : cur;
-                const next = [...base, ver];
-                return { versions: next, activeVersionId: ver.id, content: url, status: "success", generating: false, generateError: undefined, expanded, expandedFrom: rawDoc, expandError: undefined };
-            });
+            set((prev) => ({ ...versionAppendPatch(prev, url, prompt), expanded, expandedFrom: rawDoc, expandError: undefined }));
         } catch (e) {
             const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
             // 连接层失败（无响应）与业务失败要区分：前者任务可能已在后台建成，提示用户不要连点。
@@ -440,8 +345,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
             // 错误持久化：面板关闭重开仍可见；节点卡片底部同步红标。
             set({ generating: false, generateError: msg });
         } finally {
-            runningControllers.delete(ctx.node.id);
-            setRunning(false);
+            guard.end();
         }
     };
 
@@ -453,8 +357,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
     };
 
     const deleteVersion = (id: string) => {
-        const rest = versions.filter((item) => item.id !== id);
-        const next = rest.some((item) => item.id === activeId) ? rest.find((item) => item.id === activeId) : rest[rest.length - 1];
+        const { rest, next } = nextAfterDelete(versions, activeId, id);
         set({ versions: rest, activeVersionId: next?.id, content: next?.image || "" });
         if (next) void fitNode(next.image);
     };
@@ -472,7 +375,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     关闭
                 </button>
             </div>
-            <FieldGroup title="基础" theme={ctx.theme}>
+            <FieldGroup accent="#8b5cf6" title="基础" theme={ctx.theme}>
                 <label style={lab}>
                     名称
                     <input value={(m.name as string) || ""} onChange={(e) => setName(e.target.value)} placeholder="调度主题，也是节点名称" style={{ ...input, marginTop: 4, fontWeight: 400 }} />
@@ -502,7 +405,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     <div style={{ fontSize: 12, lineHeight: 1.6, padding: "8px 10px", borderRadius: 8, background: ctx.theme.node.fill }}>{LOCKED_CAMERA}</div>
                 </div>
             </FieldGroup>
-            <FieldGroup title="角色（统一传入）" theme={ctx.theme}>
+            <FieldGroup accent="#8b5cf6" title="角色（统一传入）" theme={ctx.theme}>
                 {(() => {
                     const ids = normalizeCastIds(m);
                     const snaps = normalizeCastNames(m);
@@ -547,7 +450,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     );
                 })()}
             </FieldGroup>
-            <FieldGroup title="调度文档" theme={ctx.theme}>
+            <FieldGroup accent="#8b5cf6" title="调度文档" theme={ctx.theme}>
                 <textarea value={(m.doc as string) || ""} onChange={(e) => set({ doc: e.target.value })} rows={6} placeholder={"格1：苏近景，用图片1\n格2：（空）"} style={{ ...input, resize: "vertical" }} />
                 <button type="button" onClick={fillDraft} style={{ ...btn, alignSelf: "flex-start" }}>
                     由分配生成草稿
@@ -565,7 +468,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     {expandedText !== "" && !expandedFresh ? <div style={{ color: ctx.theme.node.muted }}>（文档已改，下次生成时重新展开）</div> : null}
                 </div>
             </div>
-            <FieldGroup title={`版本（${versions.length}）`} theme={ctx.theme}>
+            <FieldGroup accent="#8b5cf6" title={`版本（${versions.length}）`} theme={ctx.theme}>
                 {versions.length ? (
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         {versions.map((v, i) => (
@@ -601,7 +504,9 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                         onChange={(e) => {
                             const files = Array.from(e.target.files || []);
                             e.target.value = "";
-                            importFilesAsVersions(ctx, files).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                            importFilesAsVersions(ctx, files, () => buildGridPrompt({ ...(m as GridFields), characters: cast.characters, spaceName: cast.spaceName, spaceImages: cast.spaceImages }).prompt).catch((err) =>
+                                setError(err instanceof Error ? err.message : String(err)),
+                            );
                         }}
                     />
                 </label>
@@ -616,7 +521,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
                     ))}
                 </select>
                 {running ? (
-                    <button type="button" onClick={cancel} style={btn}>
+                    <button type="button" onClick={() => guard.cancel()} style={btn}>
                         取消
                     </button>
                 ) : (
@@ -634,7 +539,7 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
 export default definePlugin({
     id: "grid",
     name: "宫格调度节点",
-    version: "1.0.1",
+    version: "1.0.2",
     description: "2*2四宫格调度：按名引用角色/空间节点，调度文档拼装提示词一次生成四帧静帧",
     nodes: [
         {
@@ -649,7 +554,7 @@ export default definePlugin({
             panelPlacement: "left",
             hasTargetHandle: false, // 关闭上游传入：不接收其他节点的连线
             resource: (node) => {
-                const url = activeImage(node.metadata || {});
+                const url = activeImageUrl(node.metadata || {});
                 return url ? { kind: "image", url } : null;
             },
             Content: GridContent,
@@ -662,13 +567,12 @@ export default definePlugin({
                     icon: "⬇️",
                     onClick: () => {
                         const meta = ctx.node.metadata || {};
-                        const list = (Array.isArray(meta.versions) ? (meta.versions as GridVersion[]) : []).filter((v) => v && v.image);
+                        const list = resolveVersions(meta);
                         const current = list.find((v) => v.id === meta.activeVersionId) || list[list.length - 1];
                         const url = current?.image || (typeof meta.content === "string" ? meta.content : "");
                         if (!url) return;
                         const num = list.findIndex((v) => v === current) + 1 || list.length;
-                        const filename = `${((typeof meta.name === "string" && meta.name) || "宫格调度").replace(/[\\/:*?"<>|]/g, "_")}-v${num}.png`;
-                        downloadImage(url, filename).catch((e) => console.error("[grid] download failed", e));
+                        downloadImage(url, versionFilename(typeof meta.name === "string" ? meta.name : "", "宫格调度", num)).catch((e) => console.error("[grid] download failed", e));
                     },
                 },
                 {
@@ -678,13 +582,17 @@ export default definePlugin({
                     icon: "📥",
                     onClick: () => {
                         pickImageFiles((files) => {
-                            importFilesAsVersions(ctx, files).catch((e) => ctx.updateMetadata({ generateError: e instanceof Error ? e.message : String(e) }));
+                            importFilesAsVersions(ctx, files, () => {
+                                const mm = ctx.node.metadata || {};
+                                const c = resolveCast(ctx.getNodes(), mm);
+                                return buildGridPrompt({ ...(mm as GridFields), characters: c.characters, spaceName: c.spaceName, spaceImages: c.spaceImages }).prompt;
+                            }).catch((e) => ctx.updateMetadata({ generateError: e instanceof Error ? e.message : String(e) }));
                         });
                     },
                 },
             ],
             onDoubleClick: (ctx) => {
-                if (!activeImage(ctx.node.metadata || {})) return false;
+                if (!activeImageUrl(ctx.node.metadata || {})) return false;
                 ctx.updateMetadata({ previewOpen: true });
                 return true;
             },
