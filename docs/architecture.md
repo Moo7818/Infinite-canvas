@@ -1,4 +1,10 @@
-# 架构设计（基于上游 v0.18.0 实测）
+# 架构设计（上游 v0.19.0 产品基线 + 本地二次开发；以当前代码为准）
+
+## 0 仓库与代码归属
+
+仓库根目录是二次开发协作层，`infinite-canvas/` 是可独立发布的产品树。产品树是上游代码的 vendor copy，同时包含本地自研插件及部分宿主扩展；不能把 `web/` 当作未经修改的原版，也不能把所有 `plugins/canvas/` 插件都视为本地新增。上游同步按根路径映射到 `infinite-canvas/`，流程见 [Git 与上游同步策略](./git-branch-strategy.md)。
+
+自研节点主要位于 `plugins/canvas/character`、`grid`、`prop`、`scene`、`video` 和共享包 `shared`。其他 SDK、registry、template 与内置示例插件是上游插件体系的一部分。归属以基线和 Git 历史为准。
 
 ## 1 整体分层
 
@@ -10,7 +16,7 @@ UI 层      web/src/pages/* + web/src/components/canvas/*（AntD + Tailwind + lu
 持久层     web/src/lib/localforage-storage.ts → localforage（IndexedDB），小配置走 localStorage
 类型层     web/src/types/canvas.ts + web/src/types/canvas-plugin.ts
 本地 Agent canvas-agent/src/server/http.ts（Express + SSE）+ canvas-agent/src/canvas/session.ts（MCP 会话）
-插件层     plugins/canvas/sdk + template / registry + html / markdown / svg / panorama / sticky-note
+插件层     plugins/canvas/sdk + template / registry + 上游插件 + 自研插件（character / grid / prop / scene / video / shared）
 ```
 
 **无后端设计**：浏览器直连用户配置的 `baseUrl`，多渠道见 `infinite-canvas/web/src/stores/use-config-store.ts:18`（`ModelChannel`）与 `:28`（`channelMode`）。
@@ -54,4 +60,4 @@ infinite-canvas/
 ## 6 数据流
 
 `用户交互 → store 更新 → localforage 持久化 →（可选）WebDAV 同步`；`Agent/MCP → tool_call → 前端 applyOps → 状态回传`。
-自定义模型调用脚本经 `web/src/services/api/model-plugin.ts` 沙箱执行（`http/poll/sleep/signal/onDelta/onProgress` 注入）。
+自定义模型脚本经 `web/src/services/api/model-plugin.ts` 的 `new Function` 执行，宿主注入 `http/poll/sleep/signal/onDelta/onProgress` 等能力；这是执行封装，不是安全隔离沙箱。远端节点插件同样通过 Blob 动态导入并运行在页面环境。两类代码均应视为可信代码，详见插件开发指南的安全边界。

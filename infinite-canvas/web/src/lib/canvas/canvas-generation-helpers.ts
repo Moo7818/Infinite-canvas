@@ -49,8 +49,15 @@ export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
             const content = metadata?.content;
             if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && metadata?.storageKey) return { ...node, metadata: { ...metadata, content: await resolveMediaUrl(metadata.storageKey, content) } };
             if (node.type !== CanvasNodeType.Image || !metadata || !content) return node;
-            const images = await Promise.all((metadata.images || []).map(async (image) => (image.content ? { ...image, content: await resolveImageUrl(image.storageKey, image.content) } : image)));
-            if (metadata.storageKey) return { ...node, metadata: { ...metadata, content: await resolveImageUrl(metadata.storageKey, content), images } };
+            const images = await Promise.all(
+                (metadata.images || []).map(async (image) => {
+                    if (!image.content) return image;
+                    return { ...image, content: await resolveImageUrl(image.storageKey, image.content) };
+                }),
+            );
+            if (metadata.storageKey) {
+                return { ...node, metadata: { ...metadata, content: await resolveImageUrl(metadata.storageKey, content), images } };
+            }
             if (!content.startsWith("data:image/")) return node;
             return { ...node, metadata: { ...metadata, ...imageMetadata(await uploadImage(content)) } };
         }),

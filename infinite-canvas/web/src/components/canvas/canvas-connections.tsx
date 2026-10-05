@@ -1,10 +1,10 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import { memo, type MouseEvent as ReactMouseEvent } from "react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { CanvasConnection, CanvasNodeData, ConnectionHandle, Position } from "@/types/canvas";
 
-export function ConnectionPath({
+export const ConnectionPath = memo(function ConnectionPath({
     connection,
     from,
     to,
@@ -57,7 +57,7 @@ export function ConnectionPath({
             />
         </g>
     );
-}
+}, (previous, next) => previous.connection === next.connection && previous.from === next.from && previous.to === next.to && previous.active === next.active);
 
 export function ActiveConnectionPath({ node, handle, mouseWorld, target }: { node?: CanvasNodeData; handle: ConnectionHandle; mouseWorld: Position; target?: CanvasNodeData }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];

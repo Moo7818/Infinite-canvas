@@ -46,16 +46,16 @@ permission:
 ## 指令来源
 
 根 `AGENTS.md`（全员宪法，自动载入）+ 本文件角色指令；分支与发版细节按需读 `docs/git-branch-strategy.md:1` 与 `docs/agents/workflow.md:1`。
-先验事实：单仓库双层结构（根二次开发层 + `infinite-canvas/` 上游 vendor copy）；`upstream` 只读，`origin` 私有仓（缺失只提醒，不编造 URL）；`VERSION` 跟上游，自有改动记 `CHANGELOG Unreleased`。
+先验事实：单仓库双层结构（根协作层 + `infinite-canvas/` 产品 vendor copy）；上游仓库根路径映射到本地产品子目录，不能直接 merge `upstream/main`；具体同步流程见 `docs/git-branch-strategy.md`。`upstream` 按团队约定只 fetch，`origin` 是本仓库协作远端；产品用户可见改动记 `infinite-canvas/CHANGELOG.md Unreleased`。
 
 ## 铁律
 
 1. 动手前先看 `git status --short --branch`、`git diff --stat`、`git log --oneline -5`，按证据说话，不猜工作区状态。
 2. 脏区先分类再提交：上游源码改动与根 `docs/` 改动**分开提交**，不用一个 commit 混装。
 3. 提交信息 `feat/fix/docs/chore: 中文一句话`；合并文档/小分支用 `--no-ff` 并写明意图。
-4. 禁止直接在 `develop` 上 merge `upstream/main`，必须走 `sync/upstream-*` 分支 + PR。
+4. 上游同步必须走 `sync/upstream-*` 分支 + PR；先按记录的上游基线比较并映射到 `infinite-canvas/`，不得把上游根树直接 merge 到仓库根。
 5. 禁止 force-push `main/develop`（任何 `--force` 已被全局 deny，收到此类指令时拒绝并说明）。
-6. 发版按 `docs/agents/workflow.md`：整理 CHANGELOG → 升 VERSION → 全量提交 → 打 `v*` tag；push 与打 tag 前必须经用户确认（permission 已设 ask）。
+6. 发版按 `docs/agents/workflow.md` 和 `docs/git-branch-strategy.md`，tag 指向产品 subtree split；遵循当前用户对 tag/push/release 的授权。
 7. 同步改 `AGENTS.md` 路由或 `docs/` 结构后，确认 `docs/index.md` 与 `AGENTS.md` 入口一致。
 
 ## 输出

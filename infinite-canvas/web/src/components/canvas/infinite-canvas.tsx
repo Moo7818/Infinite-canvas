@@ -30,19 +30,64 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         startedOnBackground: false,
     });
     const scaleRef = useRef(viewport.k);
+    const viewportRef = useRef(viewport);
     const frameRef = useRef<number | null>(null);
+    const wheelFrameRef = useRef<number | null>(null);
+    const viewportCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingWheelRef = useRef<{ delta: number; clientX: number; clientY: number } | null>(null);
     const nextViewportRef = useRef<ViewportTransform | null>(null);
+    const worldRef = useRef<HTMLDivElement | null>(null);
+    const gridRef = useRef<HTMLDivElement | null>(null);
+    const onViewportChangeRef = useRef(onViewportChange);
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [isControlPressed, setIsControlPressed] = useState(false);
     const [isPanning, setIsPanning] = useState(false);
 
+    const applyViewportToDom = React.useCallback((next: ViewportTransform) => {
+        viewportRef.current = next;
+        scaleRef.current = next.k;
+
+        const world = worldRef.current;
+        if (world) world.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.k})`;
+
+        const grid = gridRef.current;
+        if (grid) {
+            const gridSize = 48 * next.k;
+            grid.style.backgroundSize = `${gridSize}px ${gridSize}px`;
+            grid.style.backgroundPosition = `${next.x % gridSize}px ${next.y % gridSize}px`;
+        }
+    }, []);
+
+    const commitViewport = React.useCallback(() => {
+        if (viewportCommitTimerRef.current) {
+            clearTimeout(viewportCommitTimerRef.current);
+            viewportCommitTimerRef.current = null;
+        }
+        onViewportChangeRef.current(viewportRef.current);
+    }, []);
+
+    const scheduleViewportCommit = React.useCallback(() => {
+        if (viewportCommitTimerRef.current) return;
+        viewportCommitTimerRef.current = setTimeout(() => {
+            viewportCommitTimerRef.current = null;
+            onViewportChangeRef.current(viewportRef.current);
+        }, 100);
+    }, []);
+
     useEffect(() => {
-        scaleRef.current = viewport.k;
-    }, [viewport.k]);
+        onViewportChangeRef.current = onViewportChange;
+    }, [onViewportChange]);
+
+    useEffect(() => {
+        if (viewport.x === viewportRef.current.x && viewport.y === viewportRef.current.y && viewport.k === viewportRef.current.k) return;
+        applyViewportToDom(viewport);
+    }, [applyViewportToDom, viewport]);
 
     useEffect(
         () => () => {
             if (frameRef.current) cancelAnimationFrame(frameRef.current);
+            if (wheelFrameRef.current) cancelAnimationFrame(wheelFrameRef.current);
+            if (viewportCommitTimerRef.current) clearTimeout(viewportCommitTimerRef.current);
         },
         [],
     );
@@ -88,21 +133,36 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
 
-        const delta = -event.deltaY;
-        const factor = Math.pow(1.1, delta / 100);
-        const newScale = Math.min(Math.max(viewport.k * factor, 0.05), 5);
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
+        const pending = pendingWheelRef.current;
+        pendingWheelRef.current = {
+            delta: (pending?.delta || 0) - event.deltaY,
+            clientX: event.clientX,
+            clientY: event.clientY,
+        };
+        if (wheelFrameRef.current) return;
 
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
-        const worldX = (mouseX - viewport.x) / viewport.k;
-        const worldY = (mouseY - viewport.y) / viewport.k;
+        wheelFrameRef.current = requestAnimationFrame(() => {
+            wheelFrameRef.current = null;
+            const wheel = pendingWheelRef.current;
+            pendingWheelRef.current = null;
+            const rect = containerRef.current?.getBoundingClientRect();
+            if (!wheel || !rect) return;
 
-        onViewportChange({
-            x: mouseX - worldX * newScale,
-            y: mouseY - worldY * newScale,
-            k: newScale,
+            const currentViewport = viewportRef.current;
+            const factor = Math.pow(1.1, wheel.delta / 100);
+            const newScale = Math.min(Math.max(currentViewport.k * factor, 0.05), 5);
+            const mouseX = wheel.clientX - rect.left;
+            const mouseY = wheel.clientY - rect.top;
+            const worldX = (mouseX - currentViewport.x) / currentViewport.k;
+            const worldY = (mouseY - currentViewport.y) / currentViewport.k;
+            const nextViewport = {
+                x: mouseX - worldX * newScale,
+                y: mouseY - worldY * newScale,
+                k: newScale,
+            };
+
+            applyViewportToDom(nextViewport);
+            scheduleViewportCommit();
         });
     };
 
@@ -122,8 +182,8 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
                 isPanning: true,
                 startX: event.clientX,
                 startY: event.clientY,
-                initialX: viewport.x,
-                initialY: viewport.y,
+                initialX: viewportRef.current.x,
+                initialY: viewportRef.current.y,
                 hasMoved: false,
                 startedOnBackground: isBackgroundClick,
             };
@@ -163,16 +223,27 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             if (frameRef.current) return;
             frameRef.current = requestAnimationFrame(() => {
                 frameRef.current = null;
-                if (nextViewportRef.current) onViewportChange(nextViewportRef.current);
+                if (nextViewportRef.current) {
+                    applyViewportToDom(nextViewportRef.current);
+                    scheduleViewportCommit();
+                }
             });
         };
 
         const handlePointerUp = () => {
             if (!panState.current.isPanning) return;
 
+            if (frameRef.current) {
+                cancelAnimationFrame(frameRef.current);
+                frameRef.current = null;
+                if (nextViewportRef.current) applyViewportToDom(nextViewportRef.current);
+            }
+
             if (!panState.current.hasMoved && panState.current.startedOnBackground) {
                 onCanvasDeselect?.();
             }
+            if (panState.current.hasMoved) commitViewport();
+            nextViewportRef.current = null;
             panState.current.isPanning = false;
             setIsPanning(false);
             document.body.style.cursor = "";
@@ -187,7 +258,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             window.removeEventListener("pointercancel", handlePointerUp);
             document.body.style.cursor = "";
         };
-    }, [onCanvasDeselect, onViewportChange]);
+    }, [applyViewportToDom, commitViewport, onCanvasDeselect, scheduleViewportCommit]);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -219,8 +290,9 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             onDragOver={(event) => event.preventDefault()}
             onDrop={onDrop}
         >
-            <CanvasGrid viewport={viewport} mode={backgroundMode} />
+            <CanvasGrid gridRef={gridRef} viewport={viewport} mode={backgroundMode} />
             <div
+                ref={worldRef}
                 className="absolute origin-top-left"
                 style={{
                     transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.k})`,
@@ -232,7 +304,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
     );
 }
 
-function CanvasGrid({ viewport, mode }: { viewport: ViewportTransform; mode: CanvasBackgroundMode }) {
+function CanvasGrid({ gridRef, viewport, mode }: { gridRef: React.RefObject<HTMLDivElement | null>; viewport: ViewportTransform; mode: CanvasBackgroundMode }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     if (mode === "blank") return null;
 
@@ -245,6 +317,7 @@ function CanvasGrid({ viewport, mode }: { viewport: ViewportTransform; mode: Can
 
     return (
         <div
+            ref={gridRef}
             className="pointer-events-none absolute inset-0 opacity-40"
             style={{
                 backgroundImage,

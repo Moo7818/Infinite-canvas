@@ -23,7 +23,7 @@ import {
 import type { VersionItem } from "canvas-plugin-shared";
 
 export const PROMPT_PREFIX =
-    "左侧为角色半身近景，右侧为人物全身三视图（正面、侧边、背面，正面视图不显示头部区域），纯白色背景，光线柔和均匀，1/4黑柔滤镜、电影质感摄影实拍。";
+    "左侧为角色半身近景，右侧为人物全身三视图（正面、侧边、背面，正面视图不显示头部区域），纯白色背景，光线柔和均匀，1/4黑柔滤镜、电影质感摄影实拍。严禁角色手持任何道具，严禁角色做夸张表情。";
 
 export type CharacterFields = {
     name?: string;
