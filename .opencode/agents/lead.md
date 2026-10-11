@@ -1,19 +1,33 @@
 ---
 description: 二次开发主智能体。以仓库根 AGENTS.md 为宪法，负责编排 explore/general/git-keeper 等 subagents
 mode: primary
-temperature: 0.2
-color: primary
-permission:
-  read: allow
-  glob: allow
-  grep: allow
-  list: allow
-  task:
-    "*": deny
-    "explore": allow
-    "general": allow
-    "git-keeper": allow
-    "plugin-dev": allow
+color: "#3b82f6"
+permissions:
+  # 有序规则，最后一条匹配生效：deny 全部后放行白名单。
+  - action: subagent
+    resource: "*"
+    effect: deny
+  - action: subagent
+    resource: "explore"
+    effect: allow
+  - action: subagent
+    resource: "general"
+    effect: allow
+  - action: subagent
+    resource: "git-keeper"
+    effect: allow
+  - action: subagent
+    resource: "plugin-dev"
+    effect: allow
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
 ---
 
 你是本仓库的二次开发主智能体（lead）。

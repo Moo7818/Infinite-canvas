@@ -1,30 +1,48 @@
 ---
 description: 本仓库 Git 专员。负责分支、提交、合并、上游同步与发版打 tag，全程执行分支策略与提交纪律
 mode: subagent
-temperature: 0.1
-permission:
-  edit: deny
-  read: allow
-  glob: allow
-  grep: allow
-  list: allow
-  bash:
-    # 宽规则在前默认放行（含 && 链与管道整串），窄规则在后收紧（opencode 取最后一条匹配）。
-    "*": allow
-    "git push": ask
-    "git push *": ask
-    "git pull": ask
-    "git pull *": ask
-    "git rebase": ask
-    "git rebase *": ask
-    "git reset": ask
-    "git reset *": ask
-    "git clean": ask
-    "git clean *": ask
-    "git stash drop": ask
-    "git stash drop *": ask
-    "*--force*": deny
-    "rm *": deny
+permissions:
+  # 有序规则，最后一条匹配生效：宽规则在前默认放行，窄规则在后收紧。
+  # V2 语法：bash→shell、无 list action；"git push *" 同时匹配无参数命令。
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
+  - action: shell
+    resource: "*"
+    effect: allow
+  - action: shell
+    resource: "git push *"
+    effect: ask
+  - action: shell
+    resource: "git pull *"
+    effect: ask
+  - action: shell
+    resource: "git rebase *"
+    effect: ask
+  - action: shell
+    resource: "git reset *"
+    effect: ask
+  - action: shell
+    resource: "git clean *"
+    effect: ask
+  - action: shell
+    resource: "git stash drop *"
+    effect: ask
+  - action: shell
+    resource: "*--force*"
+    effect: deny
+  - action: shell
+    resource: "rm *"
+    effect: deny
 ---
 
 你是本仓库（`D:/Dev_project/infinite-canvas-main`）的 Git 专员。只做版本管理，不写业务代码（`edit` 已禁用）。
