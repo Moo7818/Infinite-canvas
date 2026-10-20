@@ -1,0 +1,54 @@
+# 脱离 Codex：其他 harness 适配方案调研
+
+> 调研范围：`infinite-canvas/canvas-agent/src/`（上游 v0.19.0）+ 本仓库 `.opencode/`。全部结论带文件:行号。
+> 结论先行：**MCP 工具层已对所有 harness 开放（opencode 已接入）；Codex 独占的是侧边栏多轮体验（turn 管线）。** 存在三条适配路线，工作量 2-5 天 / 1-2 周 / 2-4 周递增。
+
+## 1. Codex 耦合点清单（程度分级）
+
+**硬依赖（侧边栏 turn 管线唯一实现）**：
+- `agent/codex-client.ts:69-105` spawn `codex app-server --stdio`；`:102-293` 全套私有 JSON-RPC（thread/start·resume·fork、turn/start·interrupt、model/list、skills/*）；`:280-293,:663-682` app-server 反向审批请求 → SSE `codex_approval`；`:777-814` 向 Codex thread 注入 infinite-canvas MCP 与 approval 配置；`:830-866` 事件归一化。
+- `agent/codex-protocol.ts:60-158` 私有协议类型；`agent/codex.ts`（队列/单例/线程生命周期/Skill 草稿）；`agent/codex-history.ts`（历史 = Codex rollout 投影，标题硬编码 "Codex"）；`agent/codex-event-history.ts:12` 落盘 `~/.infinite-canvas/codex-event-history.json`。
+- `server/http.ts`：`/agent/codex/*` 全部端点（:173-422，turn 在 :292-400），事件广播作用域由 `codexBusy` 决定（:38）。
+- 依赖：`canvas-agent/package.json:26` `"@openai/codex": "0.146.0"` + `version-check.ts` 启动校验。
+
+**软耦合（命名/词表 Codex 化，语义通用）**：
+- `canvas/session.ts`：`CodexState/codexBusy/codexMutation/codexReplayEvents` 等状态机本 harness 无关，只是命名；`AGENT_PROTOCOL_VERSION = 6`（:26，前端版本不匹配即强断连）。
+- 前端：`services/api/canvas-agent.ts:67-116` Codex 路径；`local-agent-panel.tsx` 多处；i18n 大量 "Codex" 文案与 effort/permission 词表。
+
+## 2. Claude 适配现状（骨架已有，离可用差整条管线）
+
+已实现（`agent/claude.ts`，共 56 行）：spawn `claude -p --output-format stream-json --allowedTools mcp__infinite-canvas__*`，stdout 按 JSON 行 emit；`http.ts:423-426` 只有 `/agent/claude/turn` 一个极简端点。
+
+差距 12 项（摘要）：① 事件未归一成 `turn.*/item.*` 协议（前端时间线/思考卡/计划卡全渲染不出）；② 无 thread/turn 身份（重放键失效）；③ 不接会话状态机；④ 无并发锁/一致性校验；⑤ 无历史多轮；⑥ 无中断（不保存 ChildProcess）；⑦ 无权限确认流（只靠 allowedTools 放行）；⑧ 无附件管线；⑨ 无前端 harness 开关（模型列表硬走 `/agent/codex/models`）；⑩ 无 Skill；⑪ 无测试；⑫ 官方定位：README:143-159 明示"当前网页侧边栏只开放 Codex"，规划要求用 Claude Agent SDK 而非 CLI（`local-agent-integration-plan.mdx:16,38`，交付阶段 3）。
+
+## 3. MCP-only 模式：其他 harness 今天能拿到什么
+
+**能拿（全量工具层能力，对所有客户端一致）**：34 工具全部读写画布/工作台/生成；**浏览器写操作确认卡对任何 harness 的 MCP 调用都生效**（`agent-event-formatters.ts:507-509` 确认门不是 Codex 专属）；多轮上下文由 harness 自己承担。README:147-157 官方给出 Claude Code `claude mcp add` 接法；opencode 已注册（`.opencode/opencode.json:3-11`）。
+
+**拿不到（侧边栏专属）**：过程时间线（思考/计划/工具卡）；多轮会话历史/线程列表；权限审批卡（MCP-only 场景由客户端自身策略处理）；图片附件管线（`canvas_create_attachment_nodes` 依赖 Codex turn 附件，`session.ts:339-372`）；模型/力度/权限选择；停止按钮。
+
+## 4. 三条适配路线
+
+### 方案 a：纯 MCP 增强（2-5 天，零协议风险，全客户端受益）
+把 turn 级能力沉淀成 MCP 工具：附件入口 harness 无关化（`session.ts:339-372` 接受 dataUrl 而非仅 turn 附件）、会话/时间线只读工具、`agent_interrupt` 等。改动集中在 `schemas.ts` + `session.ts`，不动协议不动前端。
+- 收益：opencode/Claude Code 立即补齐附件等缺口，与确认卡天然兼容。
+- 风险：工具数已 34（token 成本）；时间线类"会话感"体验 MCP 单次调用表达力有限。
+
+### 方案 b：补齐 `/agent/claude/turn` 成通用 turn 端点（1-2 周）
+`claude.ts` 补事件归一化（stream-json → `turn.*/item.*`）、状态机接入、中断、权限流（Claude Agent SDK `canUseTool`，官方规划方向）、历史持久化；前端加 harness 开关与条件渲染。该通用端点天然是后续 harness（含 opencode）的接入点。
+- 风险：`claude -p` 一次性进程，多轮需 resume/Agent SDK；Codex 专属 UI 需条件化，回归面较大。
+
+### 方案 c：harness-neutral 抽象层（2-4 周）
+新建 `agent/harness.ts` 接口（startThread/startTurn/interrupt/approve/mapEvents…），Codex/Claude 收敛为实现；路由去 Codex 前缀；`codex_state`→`agent_state` 等改名属**破坏性协议变更**（升 `AGENT_PROTOCOL_VERSION`，旧面板强断连）。
+- 风险：`http.ts`/`session.ts` 是上游热点文件，后续上游同步冲突最高；三个大测试文件断言需全改。**仅在确认长期维护多 harness 时做。**
+
+## 5. opencode 接侧边栏级体验：技术路径已存在
+
+仓库内证据：`.opencode/package-lock.json:129-131` 已引入 `@opencode-ai/sdk@1.18.30`；SDK 提供 `createOpencodeServer`（`node_modules/@opencode-ai/sdk/dist/server.d.ts:17`）、SSE 事件流（`message.part.updated`/`session.status`/`session.idle`）、会话多轮（`session.create/prompt/abort/fork/messages`）、**权限确认流**（`permission.updated` + 回执端点 `POST /session/{id}/permissions/{permissionID}`）。
+
+**路径**：仿 Codex 适配器新增 `canvas-agent/src/agent/opencode.ts`——起 opencode server → `session.create`+`session.prompt` → 订阅事件流，映射为现有 `turn.*/item.*` 与审批卡（即落方案 b 的通用 turn 端点后，opencode 是第一个受益客户端）。
+- 风险：SDK 迭代快（1.18.30）；opencode 侧作为客户端调画布 MCP 的审批策略需另行确认（`.opencode/opencode.json` 未配置 permission 项）。
+
+## 6. 建议
+
+**a → b → (视需求) c**：a 立即做（顺手可捎上插件 MCP 工具方案，两者都动 `schemas.ts`/`session.ts`）；b 按官方规划用 Claude Agent SDK 补齐，做完后 opencode 适配是增量工作；c 仅长期多 harness 战略下启动，事件名尽量"只增不改"规避协议升版。
