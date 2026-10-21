@@ -4,7 +4,7 @@
 > 本文为中英对照的只读清单；参数细节以 schemas.ts 为准。协议入口：本机 `127.0.0.1:17371`，MCP 启动命令 `npx -y @basketikun/canvas-agent@latest mcp`。本工具集对任意 MCP 客户端开放（协议无关），注册示例见 `.opencode/opencode.json`（其他客户端同理）。
 > This is a read-only bilingual reference. Parameter details follow `schemas.ts`. Local endpoint: `127.0.0.1:17371`; MCP command: `npx -y @basketikun/canvas-agent@latest mcp`.
 
-共 40 个工具 / 40 tools in total.
+共 41 个工具 / 41 tools in total.
 
 ## 1. 站点导航 Site navigation（1）
 
@@ -40,7 +40,7 @@
 - EN: List the canvas node types registered in the current web page (type id, title, owning plugin, default size, create-menu visibility), filterable by `pluginId`. Plugin node types are outside `canvas_create_node`'s enum; confirm ids here first.
 - 入参 / Params: `pluginId?`
 
-## 3. 画布写操作 Canvas writing（26）
+## 3. 画布写操作 Canvas writing（27）
 
 ### `canvas_apply_ops`
 - 中文：批量操作当前画布。ops 支持 `add_node`、`update_node`、`delete_node`、`delete_connections`、`connect_nodes`、`set_viewport`、`select_nodes`、`run_generation`。
@@ -53,9 +53,14 @@
 - 入参 / Params: `nodeType`(必填/required), `title?`, `x?`, `y?`, `width?`, `height?`, `metadata?`
 
 ### `canvas_create_attachment_nodes`
-- 中文：把对话中的图片附件创建成真实画布图片节点；返回的节点 ID 可作生成参考图。
-- EN: Create real canvas image nodes from chat image attachments; returned node ids can be used as generation reference images.
+- 中文：把用户上传的图片附件创建成真实画布图片节点；同一标签页的附件跨轮保留，`attachmentIds` 取附件清单或 `canvas_list_attachments` 的返回值；返回的节点 ID 可作生成参考图。
+- EN: Create real canvas image nodes from uploaded image attachments. Attachments persist across turns in the same tab; take `attachmentIds` from the attachment list or `canvas_list_attachments`. Returned node ids can be used as generation reference images.
 - 入参 / Params: `attachmentIds[]`(必填/required), `x?`, `y?`, `gap?`, `direction?: row|column`
+
+### `canvas_list_attachments`
+- 中文：列出当前标签页最近上传、仍可使用的图片附件（`attachmentId`、文件名、类型、尺寸）；每个标签页保留最近 24 张。旧附件 ID 不确定时先调用本工具。
+- EN: List image attachments still usable in the current tab (`attachmentId`, name, type, size); up to 24 recent attachments per tab. Call this when older attachment ids are unknown.
+- 入参 / Params: 无 / none
 
 ### `canvas_create_text_node`
 - 中文：创建单个文本节点。
@@ -224,5 +229,7 @@
 - EN: The node-type enum is locked to the five core types (`schemas.ts:6`), but 5 semantic tools now create plugin nodes (character/scene/prop/grid/film). `add_node` rejects an explicitly provided unregistered nodeType instead of silently falling back to Text. Plugin nodes can be read and updated by id; metadata is returned in full (only `content` is truncated at 240 chars). `run_generation` on a plugin node falls into the host's built-in flow and does not trigger the plugin's own generation (deferred).
 - 中文：**项目级 CRUD 缺失**——没有新建/重命名/删除画布的工具；新建画布只能借助 `site_navigate("/canvas?mode=new")` 触发网页自动流程（默认标题"无限画布 N"）。
 - EN: **No project-level CRUD** — there is no tool to create/rename/delete a canvas. Creating relies on `site_navigate("/canvas?mode=new")`, which triggers the web app's auto-create flow (default title "Canvas N").
+- 中文：图片字段（`faceImages`、`styleImage`、`refs` 等）只接受 `data:image/...` dataURL 或 `http(s)` URL；`file://`、`blob:`、相对路径、画布节点 ID 会直接报错。附件文件由 Agent 写入工作空间 `.attachments/<attachmentId>.<ext>`，可读但不要写进画布字段。`metadata`/`patch` 推荐传对象，传 JSON 字符串会被自动解析。
+- EN: Image fields (`faceImages`, `styleImage`, `refs`, ...) accept only `data:image/...` data URLs or `http(s)` URLs; `file://`, `blob:`, relative paths and canvas node ids are rejected. Attachment files are written by the agent to `.attachments/<attachmentId>.<ext>` in the workspace for reading, not for canvas fields. `metadata`/`patch` should be objects; JSON strings are parsed automatically.
 - 中文：鉴权用 `canvas-agent.json` 的 `token`（查询参数或 `x-canvas-agent-token` 头）；网页侧边栏直连走 HTTP+SSE，属另一条链路（Codex 专属 turn 端点）。
 - EN: Auth uses the `token` from `canvas-agent.json` (query param or `x-canvas-agent-token` header). The web sidebar uses a separate HTTP+SSE path with a Codex-specific turn endpoint.

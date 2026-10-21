@@ -14,9 +14,9 @@
 | [Git 与上游同步策略](./git-branch-strategy.md) | 代码归属、分支、上游根目录映射同步、产品发行 |
 | [插件开发指南](./plugin-dev-guide.md) | 插件契约/宿主机制/ctx 能力/工程流/批量约定 |
 | [Grsai 渠道集成](./grsai-integration.md) | 接口行为/三故障判定/版本确认/async 状态 |
-| [MCP 工具清单](./mcp-tools.md) | 画布 MCP 34 工具中英对照/参数/边界 |
+| [MCP 工具清单](./mcp-tools.md) | 画布 MCP 41 工具中英对照/参数/边界 |
 | [MCP 调研简报](./research/调研简报.md) | libtv 对比/插件工具扩展/harness 适配三线结论与待拍板项 |
-| [libtv MCP 能力对比](./research/libtv-MCP能力对比.md) | libtv 85 工具面 vs 本 MCP 34 工具差异与可借鉴设计 |
+| [libtv MCP 能力对比](./research/libtv-MCP能力对比.md) | libtv 85 工具面 vs 本 MCP 41 工具差异与可借鉴设计 |
 | [插件 MCP 工具方案](./research/插件节点MCP工具方案.md) | 插件节点 MCP 扩展链路/候选工具/扩展点与坑 |
 | [harness 适配](./research/脱离Codex的harness适配.md) | 脱离 Codex：耦合清单/三条适配路线/通用接入路径；方案 b MVP 已以 opencode 落地（见 5.1 实施状态） |
 | [上游摘要](./upstream-summary.md) | 上游功能/部署文档指路（不复制原文） |
