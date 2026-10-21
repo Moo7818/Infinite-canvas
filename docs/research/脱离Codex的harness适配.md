@@ -57,6 +57,7 @@ MVP 已实现并完成端到端验收（保持端点路径与事件合同不变�
 - **服务拉起**：SDK `createOpencode` spawn `opencode serve`（固定端口 17372），`OPENCODE_CONFIG_CONTENT` 注入 infinite-canvas MCP（扁平 `mcp.<name>` 形状，`mcp.servers.<name>` 会在 1.x CLI 校验失败导致所有端点 500）。
 - **turn 模型**：同步 `session.prompt`（1.x CLI 没有 `message-async` 异步端点，SDK 路径会命中 SPA 兜底 HTML）；`messageID` 必须以 `msg` 开头否则 400；终态由事件泵 `session.idle`/`session.error` 驱动，`turnId` 用 user message id。
 - **事件泵**：`/event` SSE 必须 `query.directory` 指定工作空间目录订阅，否则只收到 `server.*` 全局事件、会话级事件全部缺失；SDK `RequestResult` 非 throw（错误以 `{error}` 字段返回）必须自行解包。
+- **模型范围**：`listOpencodeModels` 只暴露 `opencode/*-free`（9 个官方免费模型），其余 provider 凭据已从 `auth.json` 移除；侧边栏发送裸模型名时由 `resolveModelId` 唯一解析为 `providerID/modelID`，歧义/未知名回退 opencode 默认并记 `opencode turn model` 日志；`session.error` 优先取 `error.data.message`，前端可见真实上游错误（如 `Invalid credential`/`Account is suspended`）。
 - **验收结论**：models/threads/turn 门禁/流式 `turn.*/item.*`/`mcp_tool_call`/中断/历史回读均通过（免费模型验证，如 `opencode/minimax-m3.1-flash-free`）；审批卡与 usage 未验证；共享 `opencode.db` 下 npm 1.17.10 CLI 写旧 `session` 表导致 `session_message` 外键失败，需 1.19.3+（桌面版 2.1 写 `session_v2`）。
 - **遗留**：opencode CLI 采用本地固定依赖 `opencode-ai@1.19.3`（spawn 优先解析 canvas-agent 本地 bin，再退全局 PATH；与桌面端 2.1 共享 `opencode.db`/`session_v2`，桌面端可直接看到/续写画布会话）；前端仍是 Codex 词表（文案层面）；审批卡与 usage 未验证。
 

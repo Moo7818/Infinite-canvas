@@ -113,7 +113,7 @@ function unwrapResponse(value: unknown): JsonRecord {
     return data && typeof data === "object" && !Array.isArray(data) ? (data as JsonRecord) : outer;
 }
 
-/** 查询当前可用模型；id 编码为 providerID/modelID，turn 时解码回 opencode。 */
+/** 查询当前可用模型；id 编码为 providerID/modelID，turn 时解码回 opencode。仅暴露 opencode 官方免费模型。 */
 export async function listOpencodeModels(emit: AgentEmit) {
     const opencode = await getOpencodeClient(emit);
     const payload = unwrapResponse(await opencode.config.providers());
@@ -122,9 +122,10 @@ export async function listOpencodeModels(emit: AgentEmit) {
     const data = providers.flatMap((value: unknown) => {
         const provider = (value || {}) as JsonRecord;
         const providerId = String(field(provider, "id") || "");
+        if (providerId !== "opencode") return [];
         const defaultModel = String(field(defaults, providerId) || "");
         return Object.entries((field(provider, "models") || {}) as JsonRecord)
-            .filter(([modelId]) => modelId !== "directory")
+            .filter(([modelId]) => modelId !== "directory" && modelId.endsWith("-free"))
             .map(([modelId, model]): CodexModel => ({
                 id: `${providerId}/${modelId}`,
                 model: modelId,
@@ -137,7 +138,8 @@ export async function listOpencodeModels(emit: AgentEmit) {
     return { data };
 }
 
-/** opencode 侧无原生 Skill，返回空列表（SkillStore 管理的技能仍来自 HTTP 存取端点）。 */export async function listOpencodeSkills(_emit: AgentEmit, cwd: string): Promise<CodexSkillsListEntry> {
+/** opencode 侧无原生 Skill，返回空列表（SkillStore 管理的技能仍来自 HTTP 存取端点）。 */
+export async function listOpencodeSkills(_emit: AgentEmit, cwd: string): Promise<CodexSkillsListEntry> {
     return { cwd, skills: [], errors: [] };
 }
 
