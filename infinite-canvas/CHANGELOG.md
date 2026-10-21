@@ -6,7 +6,9 @@
 
 + [调整] Agent 模型列表只展示 opencode 官方免费模型（`opencode/*-free`），不再列出其他 provider 的模型，避免误选余额不足或已停用的通道。
 
-+ [新增] Agent 侧边栏支持以 opencode 作为执行后端（harness）：`canvas-agent.json` 里 `"harness": "opencode"`（现为默认值），`/agent/codex/*` 端点路径与前端事件合同不变；启动自动拉起 opencode serve 并注入 infinite-canvas MCP，会话/模型列表与流式回复合 Codex 表现一致，旧 Codex 线程自动重建为 opencode 会话；设回 `"harness": "codex"` 可回退原 Codex 流程。opencode CLI 以本地固定依赖 `opencode-ai@1.19.3` 提供（优先本地 bin），并与桌面版 opencode 共享会话数据库。
++ [调整] opencode 运行时从产品目录拆分到仓库根 `opencode-runtime/`（独立固定 `opencode-ai@1.19.3`，`node_modules/` 与 `workspace/` 不入库），canvas-agent 不再携带该依赖；serve 以运行时目录为工作目录，站点工作空间默认落在 `opencode-runtime/workspace/site/`，会话数据库仍与桌面版共享。
+
++ [新增] Agent 侧边栏支持以 opencode 作为执行后端（harness）：`canvas-agent.json` 里 `"harness": "opencode"`（现为默认值），`/agent/codex/*` 端点路径与前端事件合同不变；启动自动拉起 opencode serve 并注入 infinite-canvas MCP，会话/模型列表与流式回复合 Codex 表现一致，旧 Codex 线程自动重建为 opencode 会话；设回 `"harness": "codex"` 可回退原 Codex 流程。opencode CLI 由仓库根独立运行时 `opencode-runtime/` 提供（固定 `opencode-ai@1.19.3`），并与桌面版 opencode 共享会话数据库。
 
 + [新增] MCP 新增节点类型列表工具与 5 个插件节点语义创建工具（角色/场景/道具/宫格/影片），可经 MCP Agent 直接建出带字段的角色、场景、道具、宫格与影片节点；显式传入未注册节点类型会报错而不是静默回退成文本节点。
 + [调整] 生成任务状态查询同时识别插件节点的生成中与失败标记，Agent 现在可以准确查询插件节点的生成进度。

@@ -32,6 +32,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 - Agent 模型设置：连接 Canvas Agent 后，输入框左下方应显示当前 Codex 模型与推理强度；模型列表应来自当前账号实际可用模型且不显示内部审查模型或重复项，切换模型后强度选项随模型能力更新且无空白选项，刷新页面后保留选择，发送任务时实际使用所选模型和强度；本地控制台与右侧「日志」应记录本轮使用的模型和推理强度。
 - Agent 新对话响应：一轮对话完成后点击「新对话」，聊天内容应在服务端确认切换后清空并进入空白对话；后台应串行创建线程并预热 MCP，多个标签页应按同一会话版本同步，旧 HTTP 响应不得覆盖较新的 SSE 状态，初始化完成前不能发送到上一条会话或重复创建线程；重启 Agent 后应重新恢复并预热已有活动线程，无法恢复的失效空线程应自动替换为可用的新线程。
 - OpenCode harness turn 稳健性：模型下拉发送的裸模型名（无 `providerId/` 前缀）会在每轮 turn 前解析为唯一对应的 `providerId/modelID`（歧义或未知名仍走 opencode 默认模型并在日志记录 `opencode turn model`），不再静默落到已停用的 qiniu 网关；turn 失败时前端应显示真实上游错误（如 qiniu `Account is suspended`、deepseek `Insufficient Balance`）而非笼统的「opencode 会话出错」；会话级写操作端点遇到瞬时 `CONVERSATION_BUSY` 冲突时最多重试等待 2 秒（4×500ms，turn 运行中立即放弃），重启 Agent 后立刻初始化会话不再直接报「Codex 正在运行或正在切换会话」，2 秒后仍冲突则照常提示稍后重试。
+- OpenCode 运行时解耦：opencode CLI 移到仓库根 `opencode-runtime/`（独立固定 `opencode-ai@1.19.3`），不再作为 canvas-agent 的依赖；Agent 以该目录为工作目录拉起 `opencode serve`，站点工作空间默认落在 `opencode-runtime/workspace/site/`，迁移后的历史会话仍能出现在侧边栏；可通过 `canvas-agent.json` 的 `opencodeRuntimeDir` 或环境变量 `OPENCODE_RUNTIME_DIR` 改位置。
 - OpenCode 模型列表范围：Agent 模型下拉只展示 opencode 官方免费模型（`opencode/*-free`，共 9 个），其他 provider 的凭据不再配置，避免误选账户已停用或欠费的模型。
 - Agent 读取画布卡片：读取当前画布完成后，卡片应按非零类型显示文本、图片、配置、视频、音频、分组、其他节点及连线数量，例如「3 个文本、5 张图片、2 个配置、4 条连线」；空画布应显示「当前画布为空」，执行失败时仍应显示错误信息，刷新恢复历史后统计保持一致。
 - Agent 首次发送响应：在空白新对话中输入内容并按回车后，输入框应立即清空、用户消息应立即出现在对话中，再显示「正在思考」；线程创建或发送失败时，原输入和附件应恢复；任务运行期间输入的新草稿不应在请求成功后被清空。
