@@ -1,8 +1,10 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk";
 
-import { ensureSiteWorkspace, loadConfig } from "../config.js";
+import { ensureSiteWorkspace, loadConfig, opencodeRuntimeDir } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { errorMessage, field, type JsonRecord } from "../utils/value.js";
 import { canvasAgentMcpCommand } from "./codex-client.js";
@@ -10,13 +12,21 @@ import type { AgentEmit } from "./types.js";
 
 const require = createRequire(import.meta.url);
 
-/** 本地固定版 opencode CLI 的 bin 目录（优先于全局 PATH，版本与共享 opencode.db 兼容）。 */
+/** 旧布局兜底：canvas-agent 内置 opencode CLI 的 bin 目录。 */
 function localOpencodeBinDir() {
     try {
         return path.join(path.dirname(require.resolve("opencode-ai/package.json")), "bin");
     } catch {
         return "";
     }
+}
+
+/** opencode CLI 可执行文件：独立运行时目录 > 旧内置依赖 > PATH。 */
+function opencodeBinary() {
+    const name = process.platform === "win32" ? "opencode.exe" : "opencode";
+    const runtime = opencodeRuntimeDir();
+    const dirs = [runtime ? path.join(runtime, "node_modules", "opencode-ai", "bin") : "", localOpencodeBinDir()].filter(Boolean);
+    return dirs.map((dir) => path.join(dir, name)).find((file) => fs.existsSync(file)) || name;
 }
 
 /** opencode 服务固定监听端口，避免与 Canvas Agent 默认端口冲突。 */
@@ -28,6 +38,7 @@ const mcpConfig = JSON.stringify({ $schema: "https://opencode.ai/config.json", m
 
 let client: OpencodeClient | null = null;
 let starting: Promise<OpencodeClient> | null = null;
+let child: ChildProcess | null = null;
 
 /** 启动并复用 opencode 本地服务；进程异常退出后下次调用自动重启。 */
 export async function getOpencodeClient(emit: AgentEmit): Promise<OpencodeClient> {
@@ -42,20 +53,29 @@ export async function getOpencodeClient(emit: AgentEmit): Promise<OpencodeClient
 }
 
 async function startOpencode(emit: AgentEmit): Promise<OpencodeClient> {
-    // 解析顺序：本地固定版 bin > 已配置 PATH > npm 全局兜底。
-    const localBin = localOpencodeBinDir();
-    if (localBin) process.env.PATH = `${localBin}${path.delimiter}${process.env.PATH || ""}`;
-    if (process.platform === "win32") {
-        // 兜底：用户 PATH 没有 opencode 时补上 npm 全局目录。
-        const npmDir = path.join(process.env.APPDATA || "", "npm");
-        if (npmDir !== path.join("", "npm") && !`${path.delimiter}${process.env.PATH || ""}${path.delimiter}`.toLowerCase().includes(`${path.delimiter}${npmDir.toLowerCase()}${path.delimiter}`)) {
-            process.env.PATH = `${process.env.PATH || ""}${path.delimiter}${npmDir}`;
-        }
-    }
+    // 独立运行时目录作为 serve 工作目录，避免把画布项目目录当成 opencode 项目。
+    const runtime = opencodeRuntimeDir();
+    const binary = opencodeBinary();
+    const url = `http://127.0.0.1:${OPENCODE_PORT}`;
+    let proc: ChildProcess | null = null;
     try {
-        const created = await createOpencode({ hostname: "127.0.0.1", port: OPENCODE_PORT, config: JSON.parse(mcpConfig) });
-        logger.info("opencode server started", { url: created.server.url });
-        const opencode = created.client;
+        proc = spawn(binary, ["serve", `--hostname=127.0.0.1`, `--port=${OPENCODE_PORT}`], {
+            cwd: runtime || process.cwd(),
+            env: { ...process.env, OPENCODE_CONFIG_CONTENT: mcpConfig },
+            stdio: ["ignore", "pipe", "pipe"],
+        });
+        child = proc;
+        proc.stdout?.resume();
+        proc.stderr?.on("data", (chunk) => logger.debug("opencode stderr", { text: String(chunk).trim() }));
+        proc.on("exit", (code) => {
+            if (child !== proc) return;
+            child = null;
+            client = null;
+            logger.warn("opencode server exited", { code });
+        });
+        await waitForServer(url, proc);
+        const opencode = createOpencodeClient({ baseUrl: url });
+        logger.info("opencode server started", { url, binary, runtime: runtime || "(继承当前目录)" });
         pumpEvents(opencode, emit).catch((error) => {
             logger.error("opencode event stream failed", error);
             emit("agent_error", { message: `opencode 事件流中断：${errorMessage(error)}` });
@@ -63,9 +83,32 @@ async function startOpencode(emit: AgentEmit): Promise<OpencodeClient> {
         });
         return opencode;
     } catch (error) {
+        if (proc && child === proc) {
+            child = null;
+            proc.kill();
+        }
         emit("agent_error", { message: `opencode 服务启动失败：${errorMessage(error)}` });
         throw error;
     }
+}
+
+/** 轮询等待 opencode serve 就绪；进程提前退出时立即失败。 */
+async function waitForServer(url: string, proc: ChildProcess, timeoutMs = 15000) {
+    let exited = "";
+    proc.once("exit", (code) => {
+        exited = `opencode 服务提前退出（code=${code}）`;
+    });
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if (exited) throw new Error(exited);
+        try {
+            if ((await fetch(`${url}/config`)).ok) return;
+        } catch {
+            // 服务尚未监听，继续等待。
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    throw new Error(`等待 opencode 服务启动超时（${timeoutMs}ms）`);
 }
 
 /** 启动 SSE 事件泵，把 opencode 原生事件交给归一化分发。 */
@@ -96,7 +139,9 @@ function sessionErrorText(properties: JsonRecord) {
     return errorMessage(field(record, "message") ?? (typeof data === "string" ? data : field(data as JsonRecord, "message")) ?? field(properties, "message")) || "opencode 会话出错";
 }
 
-type TurnWaiter = { turnId: string; resolve: (failure?: string) => void; onTurn?: (turnId: string) => void; started: boolean; finished: boolean };const activeTurns = new Map<string, TurnWaiter>();
+type TurnWaiter = { turnId: string; resolve: (failure?: string) => void; onTurn?: (turnId: string) => void; started: boolean; finished: boolean };
+
+const activeTurns = new Map<string, TurnWaiter>();
 
 /** 查询活跃 turn（未指定会话时取第一个在跑的）。 */
 export function activeTurn(sessionID?: string) {

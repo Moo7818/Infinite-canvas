@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const DEFAULT_PORT = 17371;
 export const CONFIG_DIR = path.join(os.homedir(), ".infinite-canvas");
@@ -11,7 +12,21 @@ export const AGENT_PROMPT = fs.readFileSync(new URL("../agent-instructions.md", 
 const initializedWorkspaces = new Set<string>();
 
 export type SiteWorkspaceConfig = { workspacePath: string; activeThreadId?: string; pinnedThreadIds?: string[] };
-export type CanvasAgentConfig = { url: string; token: string; origins?: string[]; workspace?: SiteWorkspaceConfig; harness?: "codex" | "opencode" };
+export type CanvasAgentConfig = { url: string; token: string; origins?: string[]; workspace?: SiteWorkspaceConfig; harness?: "codex" | "opencode"; opencodeRuntimeDir?: string };
+
+/** opencode 独立运行时目录：显式配置 > 环境变量 > 仓库根 opencode-runtime（存在时），空串表示回退旧布局。 */
+export function opencodeRuntimeDir() {
+    const configured = process.env.OPENCODE_RUNTIME_DIR || loadConfig().opencodeRuntimeDir || "";
+    if (configured) return path.resolve(configured);
+    const fallback = path.resolve(fileURLToPath(new URL("../../../opencode-runtime", import.meta.url)));
+    return fs.existsSync(fallback) ? fallback : "";
+}
+
+/** 站点工作空间默认位置：跟随 opencode 独立运行时目录，旧布局回退到用户配置目录。 */
+export function defaultSiteWorkspacePath() {
+    const runtime = opencodeRuntimeDir();
+    return runtime ? path.join(runtime, "workspace", "site") : path.join(CONFIG_DIR, "codex-workspaces", "site");
+}
 
 /** 读取侧边栏 Agent harness：彻底脱离 Codex，默认 opencode，仅显式 "codex" 时回退旧管线。 */
 export function agentHarness(): "codex" | "opencode" {
@@ -51,7 +66,7 @@ export function ensureSiteWorkspace(config: CanvasAgentConfig) {
         initializeWorkspace(workspacePath);
         return { ...current, workspacePath };
     }
-    const workspacePath = path.join(CONFIG_DIR, "codex-workspaces", "site");
+    const workspacePath = defaultSiteWorkspacePath();
     config.workspace = { workspacePath };
     initializeWorkspace(workspacePath);
     saveConfig(config);

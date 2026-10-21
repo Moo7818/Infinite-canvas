@@ -6,6 +6,8 @@ node_modules/
 data/
 *.log
 *.tsbuildinfo
+opencode-runtime/node_modules/
+opencode-runtime/workspace/
 .DS_Store
 .idea
 

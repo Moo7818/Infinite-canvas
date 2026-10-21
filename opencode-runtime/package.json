@@ -1,0 +1,12 @@
+{
+  "name": "opencode-runtime",
+  "private": true,
+  "description": "infinite-canvas 侧边栏 Agent 的 opencode 运行时（独立于 infinite-canvas/ 产品目录）",
+  "type": "module",
+  "scripts": {
+    "serve": "opencode serve --hostname=127.0.0.1 --port=17372"
+  },
+  "dependencies": {
+    "opencode-ai": "1.19.3"
+  }
+}

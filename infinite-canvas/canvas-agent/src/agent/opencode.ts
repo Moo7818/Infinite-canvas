@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import type { OpencodeClient } from "@opencode-ai/sdk";
 
+import { ensureSiteWorkspace, loadConfig } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { errorMessage, field, type JsonRecord } from "../utils/value.js";
 import { messageMetadataStore } from "./message-metadata.js";
@@ -18,6 +19,11 @@ type OpencodeSession = { id: string; title: string; directory: string; createdAt
 
 let turnQueue: Promise<unknown> = Promise.resolve();
 let loadedSessionId = "";
+
+/** 当前站点工作空间目录（opencode 会话的归属目录）。 */
+function workspaceDirectory() {
+    return ensureSiteWorkspace(loadConfig()).workspacePath;
+}
 
 /** opencode harness 暂不支持的功能统一错误。 */
 export class OpencodeUnsupportedError extends CodexSkillLookupError {
@@ -151,7 +157,7 @@ export function guardOpencodeSkill(): never {
 /** 归档（删除）指定 opencode 会话。 */
 export async function archiveOpencodeThread(emit: AgentEmit, threadId: string) {
     const opencode = await getOpencodeClient(emit);
-    await opencode.session.delete({ path: { id: threadId }, query: { directory: process.cwd() } }).catch((error) => logger.warn("Failed to delete opencode session", { threadId, error }));
+    await opencode.session.delete({ path: { id: threadId }, query: { directory: workspaceDirectory() } }).catch((error) => logger.warn("Failed to delete opencode session", { threadId, error }));
     if (loadedSessionId === threadId) loadedSessionId = "";
     await messageMetadataStore.removeThread(threadId).catch((error) => logger.warn("Failed to remove archived thread message metadata", { threadId, error }));
 }
@@ -161,7 +167,7 @@ export async function interruptOpencodeTurn(threadId?: string) {
     const sessionId = threadId || loadedSessionId;
     if (!sessionId) return false;
     const opencode = await getOpencodeClient(() => undefined);
-    return await opencode.session.abort({ path: { id: sessionId }, query: { directory: process.cwd() } }).then(
+    return await opencode.session.abort({ path: { id: sessionId }, query: { directory: workspaceDirectory() } }).then(
         () => true,
         (error) => {
             logger.warn("Failed to abort opencode session", { sessionId, error });
@@ -178,7 +184,7 @@ export async function resolveOpencodeApproval(requestId: string, decision: strin
     const response = decision === "accept" ? "once" : decision === "acceptForSession" ? "always" : "reject";
     return await opencode.postSessionIdPermissionsPermissionId({
         path: { id: sessionId, permissionID: requestId },
-        query: { directory: process.cwd() },
+        query: { directory: workspaceDirectory() },
         body: { response },
     }).then(
         () => true,
