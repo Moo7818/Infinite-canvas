@@ -88,8 +88,8 @@
 - 入参 / Params: `prompt`(必填/required), `title?`, `x?`, `y?`, `mode?`, `autoRun?`, `referenceNodeIds[]?`, 同上生成参数 / same generation options
 
 ### `canvas_create_character_node`
-- 中文：创建角色节点（`character:role`）。`name`、`age`、`traits`、`style` 描述角色；`faceText/faceImages`（≤3）、`outfitText/outfitImages`（≤2）、`extraText/extraImages`（≤3）提供参考，图片传地址或 dataURL。
-- EN: Create a character node (`character:role`). `name`, `age`, `traits`, `style` describe the role; `faceText/faceImages` (≤3), `outfitText/outfitImages` (≤2), `extraText/extraImages` (≤3) hold references; images take URLs or dataURLs.
+- 中文：创建角色节点（`character:role`）。`name`、`age`、`traits`、`style` 描述角色；`faceText/faceImages`（≤3）、`outfitText/outfitImages`（≤2）、`extraText/extraImages`（≤3）提供参考。图片只接受 `data:image/...` dataURL 或 `http(s)` URL；用户上传图先经 `canvas_create_attachment_nodes` 转成图片节点。
+- EN: Create a character node (`character:role`). `name`, `age`, `traits`, `style` describe the role; `faceText/faceImages` (≤3), `outfitText/outfitImages` (≤2), `extraText/extraImages` (≤3) hold references. Images accept only `data:image/...` data URLs or `http(s)` URLs; uploaded images go through `canvas_create_attachment_nodes` first.
 - 入参 / Params: `title?`, `x?`, `y?`, `width?`, `height?`, `name?`, `age?`, `traits?`, `style?`, `faceText?`, `faceImages[]?`, `outfitText?`, `outfitImages[]?`, `extraText?`, `extraImages[]?`
 
 ### `canvas_create_scene_node`
@@ -108,8 +108,8 @@
 - 入参 / Params: `title?`, `x?`, `y?`, `width?`, `height?`, `name?`, `castIds[]?`, `castNames[]?`, `spaceId?`, `spaceName?`, `doc?`
 
 ### `canvas_create_film_node`
-- 中文：创建影片节点（`video:film`）。`name`、`model`、`ratio`（如 16:9）、`seconds`（1–15）、`prompt`、`refs[]` 参考图；生成仍在节点面板内触发。
-- EN: Create a film node (`video:film`). `name`, `model`, `ratio` (e.g. 16:9), `seconds` (1–15), `prompt`, and `refs[]` reference images; generation is still triggered from the node panel.
+- 中文：创建影片节点（`video:film`）。`name`、`model`、`ratio`（如 16:9）、`seconds`（1–15）、`prompt`、`refs[]` 参考图（≤9）；生成仍在节点面板内触发。
+- EN: Create a film node (`video:film`). `name`, `model`, `ratio` (e.g. 16:9), `seconds` (1–15), `prompt`, and `refs[]` reference images (≤9); generation is still triggered from the node panel.
 - 入参 / Params: `title?`, `x?`, `y?`, `width?`, `height?`, `name?`, `model?`, `ratio?`, `seconds?`, `prompt?`, `refs[]?`
 
 ### `canvas_generate_text`
@@ -229,7 +229,7 @@
 - EN: The node-type enum is locked to the five core types (`schemas.ts:6`), but 5 semantic tools now create plugin nodes (character/scene/prop/grid/film). `add_node` rejects an explicitly provided unregistered nodeType instead of silently falling back to Text. Plugin nodes can be read and updated by id; metadata is returned in full (only `content` is truncated at 240 chars). `run_generation` on a plugin node falls into the host's built-in flow and does not trigger the plugin's own generation (deferred).
 - 中文：**项目级 CRUD 缺失**——没有新建/重命名/删除画布的工具；新建画布只能借助 `site_navigate("/canvas?mode=new")` 触发网页自动流程（默认标题"无限画布 N"）。
 - EN: **No project-level CRUD** — there is no tool to create/rename/delete a canvas. Creating relies on `site_navigate("/canvas?mode=new")`, which triggers the web app's auto-create flow (default title "Canvas N").
-- 中文：图片字段（`faceImages`、`styleImage`、`refs` 等）只接受 `data:image/...` dataURL 或 `http(s)` URL；`file://`、`blob:`、相对路径、画布节点 ID 会直接报错。附件文件由 Agent 写入工作空间 `.attachments/<attachmentId>.<ext>`，可读但不要写进画布字段。`metadata`/`patch` 推荐传对象，传 JSON 字符串会被自动解析。
-- EN: Image fields (`faceImages`, `styleImage`, `refs`, ...) accept only `data:image/...` data URLs or `http(s)` URLs; `file://`, `blob:`, relative paths and canvas node ids are rejected. Attachment files are written by the agent to `.attachments/<attachmentId>.<ext>` in the workspace for reading, not for canvas fields. `metadata`/`patch` should be objects; JSON strings are parsed automatically.
+- 中文：图片字段（`faceImages`、`styleImage`、`refs` 等）只接受 `data:image/...` dataURL 或 `http(s)` URL；`file://`、`blob:`、相对路径、画布节点 ID 会直接报错，数量上限按插件字段在 MCP 层强制（如 `faceImages` 3、`outfitImages` 2、`refs` 9），超量直接拒绝。附件文件由 Agent 写入工作空间 `.attachments/<attachmentId>.<ext>`，可读但不要写进画布字段。`metadata`/`patch` 推荐传对象，传 JSON 字符串会被自动解析。
+- EN: Image fields (`faceImages`, `styleImage`, `refs`, ...) accept only `data:image/...` data URLs or `http(s)` URLs; `file://`, `blob:`, relative paths and canvas node ids are rejected, and per-field count limits are enforced at the MCP layer (`faceImages` 3, `outfitImages` 2, `refs` 9, ...). Attachment files are written by the agent to `.attachments/<attachmentId>.<ext>` in the workspace for reading, not for canvas fields. `metadata`/`patch` should be objects; JSON strings are parsed automatically.
 - 中文：鉴权用 `canvas-agent.json` 的 `token`（查询参数或 `x-canvas-agent-token` 头）；网页侧边栏直连走 HTTP+SSE，属另一条链路（Codex 专属 turn 端点）。
 - EN: Auth uses the `token` from `canvas-agent.json` (query param or `x-canvas-agent-token` header). The web sidebar uses a separate HTTP+SSE path with a Codex-specific turn endpoint.

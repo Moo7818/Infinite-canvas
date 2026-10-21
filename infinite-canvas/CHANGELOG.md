@@ -8,7 +8,7 @@
 
 + [修复] 侧边栏图片附件跨轮不再失效：同一标签页最近 24 张附件继续保留，新增 `canvas_list_attachments` 查询可用附件，提示词会同时列出本轮与此前附件；附件文件改写到工作空间 `.attachments/<attachmentId>.<扩展名>`，不再使用 `%TEMP%` 随机文件名、不再在 turn 结束时删除，`gif/webp/avif` 等扩展名也按真实类型落盘。
 
-+ [修复] MCP 自由对象参数（`metadata`、`patch`）传 JSON 字符串时自动解析为对象；图片字段（`faceImages`、`styleImage`、`refs` 等）显式拒绝 `file://`、`blob:`、相对路径和画布节点 ID，并提示先经 `canvas_create_attachment_nodes` 转成图片节点。
++ [修复] MCP 自由对象参数（`metadata`、`patch`）传 JSON 字符串时自动解析为对象；图片字段（`faceImages`、`styleImage`、`refs` 等）显式拒绝 `file://`、`blob:`、相对路径和画布节点 ID，并按插件上限强制数量（如 faceImages 3、outfitImages 2、refs 9），工具描述同步写明格式、上限与附件转节点流程。
 
 + [调整] opencode 运行时从产品目录拆分到仓库根 `opencode-runtime/`（独立固定 `opencode-ai@1.19.3`，`node_modules/` 与 `workspace/` 不入库），canvas-agent 不再携带该依赖；serve 以运行时目录为工作目录，站点工作空间默认落在 `opencode-runtime/workspace/site/`，会话数据库仍与桌面版共享。
 
