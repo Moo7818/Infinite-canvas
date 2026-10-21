@@ -89,7 +89,7 @@ test("当前 turn 的图片附件可在发起标签页画布创建图片节点",
     assert.equal(created.nodes[0].id, nodes[0].id);
     assert.equal(created.nodes[0].attachmentId, "attachment-1");
     session.clearTurnAttachments("first");
-    assert.throws(() => session.getTurnAttachment("first", "attachment-1"), /找不到/);
+    assert.throws(() => session.getTurnAttachment("first", "attachment-1"), /没有可用的图片附件|找不到/);
 });
 
 test("图片附件只允许发起 turn 的标签页读取和落入画布", async (t) => {
@@ -586,6 +586,23 @@ test("图片字段拒绝本地路径、blob 和节点 ID", async (t) => {
         await assert.rejects(session.callTool("canvas_create_character_node", { name: "林晚棠", faceImages }), /dataURL 或 http/);
     }
     assert.equal(first.event("tool_call"), undefined);
+});
+
+test("图片数组超过插件上限时直接报错", async (t) => {
+    const session = new CanvasSession();
+    const first = connect(session, "first");
+    t.after(() => first.close());
+    session.updateState(snapshot("canvas-first"), "first");
+
+    const image = "data:image/png;base64,aW1hZ2U=";
+    await assert.rejects(session.callTool("canvas_create_character_node", { faceImages: Array(4).fill(image) }), /faceImages 最多 3 张/);
+    await assert.rejects(session.callTool("canvas_create_scene_node", { envImages: Array(4).fill(image), lightImages: Array(3).fill(image) }), /最多 /);
+    await assert.rejects(session.callTool("canvas_create_film_node", { refs: Array(10).fill(image) }), /refs 最多 9 张/);
+});
+
+test("没有附件时给出重新上传提示", () => {
+    const session = new CanvasSession();
+    assert.throws(() => session.getTurnAttachment("first", "missing"), /没有可用的图片附件，请提示用户重新上传/);
 });
 
 /** 创建用于测试的画布 SSE 连接。 */

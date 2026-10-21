@@ -392,7 +392,11 @@ export class CanvasSession {
     /** 获取指定网页上传的图片附件（同一标签页的附件跨 turn 有效）。 */
     getTurnAttachment(clientId: string, attachmentId: string) {
         const attachment = this.turnAttachments.get(attachmentId);
-        if (!attachment) throw new Error(`找不到图片附件：${attachmentId}（每个标签页只保留最近 ${MAX_ATTACHMENTS_PER_CLIENT} 张，请重新上传）`);
+        if (!attachment) {
+            const available = this.listAttachments(clientId);
+            if (!available.length) throw new Error("当前标签页没有可用的图片附件，请提示用户重新上传图片后再试");
+            throw new Error(`找不到图片附件：${attachmentId}（可能已过期或来自其他标签页；当前可用：${available.map((item) => `${item.id}=${item.name}`).join("、")}）`);
+        }
         if (attachment.clientId !== clientId) throw new Error("图片附件不属于当前发起标签页，请在原页面继续操作");
         return attachment;
     }

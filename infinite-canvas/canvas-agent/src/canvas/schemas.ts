@@ -120,7 +120,8 @@ const imageRefSchema = z.string().refine((value) => /^data:image\//i.test(value)
     message: "图片必须是 data:image/... dataURL 或 http(s) URL；file://、blob:、相对路径和画布节点 ID 都不能直接作为图片地址。需要把用户上传的图片放进画布时，先调用 canvas_create_attachment_nodes 生成图片节点，再用返回的节点 ID 作为生成参考。",
 });
 
-const referenceImages = z.array(imageRefSchema);
+/** 图片数组字段：格式与插件侧上限一起校验，超量直接报错，避免拖到生图时才失败。 */
+const imageListSchema = (max: number, label: string) => z.array(imageRefSchema).max(max, { message: `${label} 最多 ${max} 张图片` });
 
 const characterNodeSchema = z.object({
     ...pluginNodeBase,
@@ -129,11 +130,11 @@ const characterNodeSchema = z.object({
     traits: z.string().optional(),
     style: z.string().optional(),
     faceText: z.string().optional(),
-    faceImages: referenceImages.optional(),
+    faceImages: imageListSchema(3, "faceImages").optional(),
     outfitText: z.string().optional(),
-    outfitImages: referenceImages.optional(),
+    outfitImages: imageListSchema(2, "outfitImages").optional(),
     extraText: z.string().optional(),
-    extraImages: referenceImages.optional(),
+    extraImages: imageListSchema(3, "extraImages").optional(),
 });
 
 const sceneNodeSchema = z.object({
@@ -143,12 +144,12 @@ const sceneNodeSchema = z.object({
     style: z.string().optional(),
     styleImage: imageRefSchema.optional(),
     envText: z.string().optional(),
-    envImages: referenceImages.optional(),
+    envImages: imageListSchema(3, "envImages").optional(),
     lightText: z.string().optional(),
-    lightImages: referenceImages.optional(),
+    lightImages: imageListSchema(2, "lightImages").optional(),
     camera: z.string().optional(),
     extraText: z.string().optional(),
-    extraImages: referenceImages.optional(),
+    extraImages: imageListSchema(2, "extraImages").optional(),
 });
 
 const propNodeSchema = z.object({
@@ -158,12 +159,12 @@ const propNodeSchema = z.object({
     style: z.string().optional(),
     styleImage: imageRefSchema.optional(),
     materialText: z.string().optional(),
-    materialImages: referenceImages.optional(),
+    materialImages: imageListSchema(2, "materialImages").optional(),
     detailText: z.string().optional(),
-    detailImages: referenceImages.optional(),
+    detailImages: imageListSchema(3, "detailImages").optional(),
     view: z.string().optional(),
     extraText: z.string().optional(),
-    extraImages: referenceImages.optional(),
+    extraImages: imageListSchema(2, "extraImages").optional(),
 });
 
 const gridNodeSchema = z.object({
@@ -183,7 +184,7 @@ const filmNodeSchema = z.object({
     ratio: z.string().optional(),
     seconds: z.union([z.string(), z.number()]).optional(),
     prompt: z.string().optional(),
-    refs: referenceImages.optional(),
+    refs: imageListSchema(9, "refs").optional(),
 });
 
 export const toolInputSchemas = {
@@ -244,13 +245,13 @@ export const toolDescriptions: Record<ToolName, string> = {
     canvas_create_text_nodes: "批量创建文本节点，适合生成标题、段落、脚本、说明等内容块。",
     canvas_create_config_node: "创建生成配置节点，可指定 text/image/video/audio 模式和生成参数，可选择立即触发生成。",
     canvas_create_image_prompt_flow: "创建提示词文本节点和图片生成配置节点，并自动连线，可选择立即触发生图。",
-    canvas_create_generation_flow: "创建通用生成流程：提示词文本节点、生成配置节点、参考节点连线，可用于文案、生图、视频或音频。",
+    canvas_create_generation_flow: "创建通用生成流程：提示词文本节点、生成配置节点、参考节点连线，可用于文案、生图、视频或音频。referenceNodeIds 传画布节点 ID（用户上传的图片先经 canvas_create_attachment_nodes 变成图片节点）。",
     canvas_list_node_types: "列出当前网页已注册的画布节点类型，包含节点类型 ID、标题、所属插件和默认尺寸。插件节点不在 canvas_create_node 的固定枚举内，创建前先用本工具确认类型 ID。",
-    canvas_create_character_node: "在当前画布创建角色节点。可按 name、age、traits、style 描述角色，用 faceText/faceImages、outfitText/outfitImages、extraText/extraImages 提供容貌、服装和其他参考；图片参数传图片地址或 dataURL。",
-    canvas_create_scene_node: "在当前画布创建场景节点。可设置 name、time、style、camera，用 envText/envImages、lightText/lightImages 描述环境与光影，styleImage 传风格参考图，extraText/extraImages 补充其他素材。",
-    canvas_create_prop_node: "在当前画布创建道具节点。可设置 name、category、style、view，用 materialText/materialImages、detailText/detailImages 描述材质与细节，styleImage 传风格参考图，extraText/extraImages 补充其他素材。",
+    canvas_create_character_node: "在当前画布创建角色节点。name、age、traits、style 描述角色；faceImages（≤3）、outfitImages（≤2）、extraImages（≤3）为参考图数组。图片只接受 data:image/... base64 dataURL 或 http(s) URL，禁止 file://、本地路径、blob:、相对路径和画布节点 ID；用户上传的图片必须先用 canvas_create_attachment_nodes 转成图片节点，生成时用节点 ID（referenceNodeIds），不要把临时文件或 .attachments 路径写进图片字段。",
+    canvas_create_scene_node: "在当前画布创建场景节点。name、time、style、camera 描述场景；envImages（≤3）、lightImages（≤2）、extraImages（≤2）为参考图数组，styleImage 为单张风格图。图片只接受 data:image/... base64 dataURL 或 http(s) URL，禁止 file://、本地路径、blob:、相对路径和画布节点 ID；用户上传的图片先经 canvas_create_attachment_nodes 转成图片节点。",
+    canvas_create_prop_node: "在当前画布创建道具节点。name、category、style、view 描述道具；materialImages（≤2）、detailImages（≤3）、extraImages（≤2）为参考图数组，styleImage 为单张风格图。图片只接受 data:image/... base64 dataURL 或 http(s) URL，禁止 file://、本地路径、blob:、相对路径和画布节点 ID；用户上传的图片先经 canvas_create_attachment_nodes 转成图片节点。",
     canvas_create_grid_node: "在当前画布创建宫格节点（2×2 四宫格）。用 castIds 传入角色节点 ID（有序），castNames 保存角色名快照，spaceId/spaceName 关联场景节点，doc 填写整体说明。",
-    canvas_create_film_node: "在当前画布创建影片节点。可设置 name、model、ratio（如 16:9）、seconds、prompt 和 refs 参考图，生成仍在节点面板内触发。",
+    canvas_create_film_node: "在当前画布创建影片节点。可设置 name、model、ratio（如 16:9）、seconds、prompt；refs 为参考图数组（≤9）。图片只接受 data:image/... base64 dataURL 或 http(s) URL，禁止 file://、本地路径、blob:、相对路径和画布节点 ID；用户上传的图片先经 canvas_create_attachment_nodes 转成图片节点。生成仍在节点面板内触发。",
     canvas_generate_text: "创建通用文本生成流程并立即触发生成。",
     canvas_generate_image: "创建通用图片生成流程并立即触发生成。",
     canvas_generate_video: "创建通用视频生成流程并立即触发生成。",
