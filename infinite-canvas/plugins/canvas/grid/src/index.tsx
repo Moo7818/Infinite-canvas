@@ -5,7 +5,9 @@ import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeData, CanvasN
 import {
     FieldGroup,
     activeImageUrl,
+    beginHostGeneration,
     downloadImage,
+    endHostGeneration,
     downscaleImage,
     fitNodeToImage,
     imageDims,
@@ -282,6 +284,11 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+    // 宿主(Agent)生成结束时不会回调面板 setRunning；按 metadata.generating 归位，避免面板卡在生成态。
+    useEffect(() => {
+        if (!(ctx.node.metadata || {}).generating && !guard.isLive()) setRunning(false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [(ctx.node.metadata || {}).generating]);
     const [model, setModel] = useState(typeof m.model === "string" ? m.model : "");
     // 模型选择持久化到 metadata，面板关闭重开不丢失。
     const pickModel = (v: string) => {
@@ -608,11 +615,14 @@ export default definePlugin({
             },
             // 宿主可程序化触发（Agent 的 run_generation）：复用与面板「生成」按钮相同的生成核心。
             generate: async (ctx) => {
-                if ((ctx.node.metadata || {}).generating) return; // 已有在途生成，避免重复触发
+                const controller = beginHostGeneration(ctx.node.id, Boolean((ctx.node.metadata || {}).generating));
+                if (!controller) return; // 面板或另一次宿主生成已在途，避免重复触发
                 try {
-                    await runGridGenerate(ctx, new AbortController());
+                    await runGridGenerate(ctx, controller);
                 } catch {
                     /* 错误已写入 metadata.generateError，由节点卡片展示 */
+                } finally {
+                    endHostGeneration(ctx.node.id);
                 }
             },
         },

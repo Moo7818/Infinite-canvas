@@ -6,7 +6,9 @@ import {
     FieldGroup,
     ImagesField,
     activeImageUrl,
+    beginHostGeneration,
     downloadImage,
+    endHostGeneration,
     downscaleImage,
     fitNodeToImage,
     importFilesAsVersions,
@@ -150,6 +152,11 @@ function VideoPanel({ ctx, onClose }: CanvasNodePanelProps) {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+    // 宿主(Agent)生成结束时不会回调面板 setRunning；按 metadata.generating 归位，避免面板卡在生成态。
+    useEffect(() => {
+        if (!(ctx.node.metadata || {}).generating && !guard.isLive()) setRunning(false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [(ctx.node.metadata || {}).generating]);
     const [error, setError] = useState("");
     const spec = specForModel(model || ctx.ai.defaultModel("video"));
     const ratio = typeof m.ratio === "string" && spec.ratios.includes(m.ratio) ? m.ratio : spec.ratios[0];
@@ -382,11 +389,14 @@ export default definePlugin({
             },
             // 宿主可程序化触发（Agent 的 run_generation）：复用与面板「生成」按钮相同的生成核心。
             generate: async (ctx) => {
-                if ((ctx.node.metadata || {}).generating) return; // 已有在途生成，避免重复触发
+                const controller = beginHostGeneration(ctx.node.id, Boolean((ctx.node.metadata || {}).generating));
+                if (!controller) return; // 面板或另一次宿主生成已在途，避免重复触发
                 try {
-                    await runVideoGenerate(ctx, new AbortController());
+                    await runVideoGenerate(ctx, controller);
                 } catch {
                     /* 错误已写入 metadata.generateError，由节点卡片展示 */
+                } finally {
+                    endHostGeneration(ctx.node.id);
                 }
             },
         },

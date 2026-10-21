@@ -5,6 +5,19 @@ import type { CanvasNodeContext } from "@infinite-canvas/plugin-sdk";
 // 注意：每个引用本包的插件 bundle 内各一份实例，天然按插件隔离。
 const runningControllers = new Map<string, AbortController>();
 
+// 宿主(Agent run_generation)触发入口与面板共用这张在途表：登记后，面板挂载时的
+// 「generating 为真但本会话无在途」兜底逻辑不会把宿主正在跑的生成误判为刷新中断。
+export function beginHostGeneration(nodeId: string, alreadyGenerating = false): AbortController | null {
+    if (runningControllers.has(nodeId) || alreadyGenerating) return null;
+    const controller = new AbortController();
+    runningControllers.set(nodeId, controller);
+    return controller;
+}
+
+export function endHostGeneration(nodeId: string): void {
+    runningControllers.delete(nodeId);
+}
+
 export function useGenerationGuard(ctx: CanvasNodeContext) {
     // 生成态持久化：generating 进 metadata，关面板重开不丢失；在途请求靠模块级取消器接管。
     const [running, setRunning] = useState(Boolean((ctx.node.metadata || {}).generating));
