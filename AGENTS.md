@@ -27,7 +27,7 @@
 | 上游功能/部署指路 | `docs/upstream-summary.md:1`（只索引，不复制原文） |
 | Grsai 渠道集成 | `docs/grsai-integration.md:1`（接口行为/三故障判定） |
 | MCP 工具清单 | `docs/mcp-tools.md:1`（34 工具中英对照/参数/边界） |
-| MCP 调研三线 | `docs/mcp-research-brief.md:1`（简报入口，下钻三篇分析） |
+| MCP 调研三线 | `docs/mcp-research/MCP调研简报.md:1`（简报入口，下钻三篇分析） |
 | 文档总览索引 | `docs/index.md:1`（唯一不沉底的全量索引） |
 
 ## 约束
