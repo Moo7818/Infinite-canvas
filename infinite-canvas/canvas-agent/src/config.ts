@@ -11,7 +11,13 @@ export const AGENT_PROMPT = fs.readFileSync(new URL("../agent-instructions.md", 
 const initializedWorkspaces = new Set<string>();
 
 export type SiteWorkspaceConfig = { workspacePath: string; activeThreadId?: string; pinnedThreadIds?: string[] };
-export type CanvasAgentConfig = { url: string; token: string; origins?: string[]; workspace?: SiteWorkspaceConfig };
+export type CanvasAgentConfig = { url: string; token: string; origins?: string[]; workspace?: SiteWorkspaceConfig; harness?: "codex" | "opencode" };
+
+/** 读取侧边栏 Agent harness：彻底脱离 Codex，默认 opencode，仅显式 "codex" 时回退旧管线。 */
+export function agentHarness(): "codex" | "opencode" {
+    const value = loadConfig().harness;
+    return value === "codex" ? "codex" : "opencode";
+}
 
 /** 读取本地 Canvas Agent 配置，不存在时生成默认配置。 */
 export function loadConfig(create = false): CanvasAgentConfig {

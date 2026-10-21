@@ -775,7 +775,7 @@ function turnCacheKey(threadId: string, turnId: string) {
 }
 
 /** 生成 Codex 调用 Canvas Agent MCP 的启动命令。 */
-function canvasAgentMcpCommand() {
+export function canvasAgentMcpCommand() {
     const current = process.argv.find((arg) => /index\.(t|j)s$/.test(arg)) || "";
     const entry = path.resolve(current || fileURLToPath(new URL("../index.js", import.meta.url)));
     const tsx = path.join(path.dirname(entry), "..", "node_modules", "tsx", "dist", "cli.mjs");

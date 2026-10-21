@@ -7,5 +7,10 @@ export function field(value: unknown, key: string) {
 
 /** 将未知异常转换为可展示的错误信息。 */
 export function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : String(error);
+    if (error instanceof Error) return error.message;
+    if (typeof error === "object" && error !== null) {
+        const record = error as Record<string, unknown>;
+        return String(record.message || JSON.stringify(error).slice(0, 500));
+    }
+    return String(error);
 }

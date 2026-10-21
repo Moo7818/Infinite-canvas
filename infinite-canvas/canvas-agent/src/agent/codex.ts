@@ -486,8 +486,8 @@ function samePath(left: string, right: string) {
     return normalize(left) === normalize(right);
 }
 
-/** 将图片附件写入临时文件供 Codex 读取。 */
-async function writeAttachmentFiles(attachments: AgentAttachment[]) {
+/** 将图片附件写入临时文件供 Agent 读取（codex 与 opencode 共用）。 */
+export async function writeAttachmentFiles(attachments: AgentAttachment[]) {
     return await Promise.all(attachments.filter((item) => item.dataUrl?.startsWith("data:image/")).map(writeAttachmentFile));
 }
 
