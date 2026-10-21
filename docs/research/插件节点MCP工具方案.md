@@ -2,7 +2,7 @@
 
 > 前置调研已完成（只读取证，全部带文件:行号）。本文为设计文档，未拍板不动代码。
 > 关联：`docs/mcp-tools.md`（工具清单与已知边界）、`docs/plugin-dev-guide.md`（插件契约）。
-> **实现状态（2026-10-21）**：候选 1（`canvas_list_node_types`）与候选 2（5 个语义创建工具 + `add_node` 未注册类型报错 + `generation_get_status` 认 `generating/generateError`）已在 `feat/mcp-plugin-tools` 分支实现，工具总数 34 → 39；候选 3 仍待契约拍板。
+> **实现状态（2026-10-21）**：候选 1（`canvas_list_node_types`）与候选 2（5 个语义创建工具 + `add_node` 未注册类型报错 + `generation_get_status` 认 `generating/generateError`）已在 `feat/mcp-plugin-tools` 分支实现，工具总数 34 → 40；候选 3 仍待契约拍板。
 
 ## 1. 现状：5 个自研插件节点
 

@@ -4,7 +4,7 @@
 > 本文为中英对照的只读清单；参数细节以 schemas.ts 为准。协议入口：本机 `127.0.0.1:17371`，MCP 启动命令 `npx -y @basketikun/canvas-agent@latest mcp`。本工具集对任意 MCP 客户端开放（协议无关），注册示例见 `.opencode/opencode.json`（其他客户端同理）。
 > This is a read-only bilingual reference. Parameter details follow `schemas.ts`. Local endpoint: `127.0.0.1:17371`; MCP command: `npx -y @basketikun/canvas-agent@latest mcp`.
 
-共 39 个工具 / 39 tools in total.
+共 40 个工具 / 40 tools in total.
 
 ## 1. 站点导航 Site navigation（1）
 
