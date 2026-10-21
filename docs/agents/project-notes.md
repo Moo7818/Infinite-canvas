@@ -8,3 +8,5 @@
 * Agent 协议版本与消息存储版本独立管理；存储升级先备份再迁移，未知版本/损坏/冲突时拒绝覆盖，不静默裁剪历史。
 * 本地启动/验收不关闭用户已开的浏览器窗口；如用户要求浏览器验证，优先用独立测试页。
 * Grsai/AutoDL 双渠道配置见 `docs/assets/grsai-autodl-canvas-config.json`（导入整体替换，导入前先导出备份）。
+* opencode 运行时独立在仓库根 `opencode-runtime/`（`node_modules/`、`workspace/` 已 gitignore），canvas-agent 只依赖 `@opencode-ai/sdk`；不要把 `opencode-ai` 依赖加回 `canvas-agent`，也不要把运行数据写进 `infinite-canvas/`。
+* opencode 会话按 `directory` 归属项目：站点工作空间在 git 仓库内时会归到该仓库项目，跨路径迁移会话需同步改写 `session.directory` 与 `project_id`。
