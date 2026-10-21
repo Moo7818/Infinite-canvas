@@ -137,8 +137,7 @@ export async function listOpencodeModels(emit: AgentEmit) {
     return { data };
 }
 
-/** opencode 侧无原生 Skill，返回空列表（SkillStore 管理的技能仍来自 HTTP 存取端点）。 */
-export async function listOpencodeSkills(_emit: AgentEmit, cwd: string): Promise<CodexSkillsListEntry> {
+/** opencode 侧无原生 Skill，返回空列表（SkillStore 管理的技能仍来自 HTTP 存取端点）。 */export async function listOpencodeSkills(_emit: AgentEmit, cwd: string): Promise<CodexSkillsListEntry> {
     return { cwd, skills: [], errors: [] };
 }
 
@@ -188,6 +187,20 @@ export async function resolveOpencodeApproval(requestId: string, decision: strin
     );
 }
 
+/** 将前端发送的裸模型名解析为 providerID/modelID（唯一匹配才解析，避免歧义误选）。 */
+async function resolveModelId(emit: AgentEmit, model: string) {
+    if (!model || model.includes("/")) return model;
+    try {
+        const entries = (await listOpencodeModels(emit)).data;
+        const matched = entries.filter((item) => item.model === model).map((item) => item.id);
+        if (matched.length === 1) return matched[0];
+        logger.warn("opencode model name not uniquely matched, falling back to default", { model, matched: matched.length });
+    } catch (error) {
+        logger.warn("Failed to resolve opencode model name", { model, error });
+    }
+    return model;
+}
+
 /** 执行一次 opencode turn，并负责附件临时文件与会话串行。 */
 export async function runOpencodeTurn(prompt: string, lifecycleEmit: AgentEmit, attachments: AgentAttachment[] = [], options: OpencodeRunOptions = {}) {
     if (!prompt.trim()) return;
@@ -216,6 +229,8 @@ async function runOpencodeTurnNow(prompt: string, lifecycleEmit: AgentEmit, atta
             });
         });
         options.onThread?.(session.id);
+        const modelId = await resolveModelId(emit, options.model || "");
+        if (options.model) logger.info("opencode turn model", { requested: options.model, resolved: modelId });
         // 同步 prompt：请求在 turn 结束时返回（1.x CLI 无 message-async 异步端点）。
         const promptTask = opencode.session.prompt({
             path: { id: session.id },
@@ -223,7 +238,7 @@ async function runOpencodeTurnNow(prompt: string, lifecycleEmit: AgentEmit, atta
             body: {
                 messageID: turnId,
                 parts: [{ type: "text" as const, text: prompt }, ...files.map((file) => ({ type: "file" as const, mime: "image/*", filename: path.basename(file), url: pathToFileURL(file).href }))],
-                ...(options.model?.includes("/") ? { model: { providerID: options.model.split("/")[0], modelID: options.model.split("/")[1] } } : {}),
+                ...(modelId?.includes("/") ? { model: { providerID: modelId.split("/")[0], modelID: modelId.split("/")[1] } } : {}),
             },
         });
         void promptTask.then(

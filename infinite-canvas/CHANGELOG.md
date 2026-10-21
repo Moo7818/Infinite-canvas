@@ -2,6 +2,8 @@
 
 ## Unreleased
 
++ [修复] opencode harness 三处 turn 问题：侧边栏发送的裸模型名不再静默落到 opencode 默认模型（此前 DeepSeek/MiMo 等请求实际打到已停用的 qiniu 网关，报 403 Account is suspended），失败原因直接透出真实上游错误而非笼统的「opencode 会话出错」；会话级写操作遇到瞬时冲突（如重启后立刻初始化会话）最多等待 2 秒重试，不再直接报「Codex 正在运行或正在切换会话」。
+
 + [新增] Agent 侧边栏支持以 opencode 作为执行后端（harness）：`canvas-agent.json` 里 `"harness": "opencode"`（现为默认值），`/agent/codex/*` 端点路径与前端事件合同不变；启动自动拉起 opencode serve 并注入 infinite-canvas MCP，会话/模型列表与流式回复合 Codex 表现一致，旧 Codex 线程自动重建为 opencode 会话；设回 `"harness": "codex"` 可回退原 Codex 流程。opencode CLI 以本地固定依赖 `opencode-ai@1.19.3` 提供（优先本地 bin），并与桌面版 opencode 共享会话数据库。
 
 + [新增] MCP 新增节点类型列表工具与 5 个插件节点语义创建工具（角色/场景/道具/宫格/影片），可经 MCP Agent 直接建出带字段的角色、场景、道具、宫格与影片节点；显式传入未注册节点类型会报错而不是静默回退成文本节点。

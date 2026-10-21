@@ -87,8 +87,16 @@ const settledParts = new Map<string, string>();
 /** 消息角色表：把 user 消息的 text part 过滤掉（前端已单独发 synthetic user message）。 */
 const messageRoles = new Map<string, string>();
 
-type TurnWaiter = { turnId: string; resolve: (failure?: string) => void; onTurn?: (turnId: string) => void; started: boolean; finished: boolean };
-const activeTurns = new Map<string, TurnWaiter>();
+/** 从 session.error 事件提取可读错误文本（真实错误可能藏在 error.data.message）。 */
+function sessionErrorText(properties: JsonRecord) {
+    const error = field(properties, "error");
+    if (typeof error === "string") return error;
+    const record = (error || {}) as JsonRecord;
+    const data = field(record, "data");
+    return errorMessage(field(record, "message") ?? (typeof data === "string" ? data : field(data as JsonRecord, "message")) ?? field(properties, "message")) || "opencode 会话出错";
+}
+
+type TurnWaiter = { turnId: string; resolve: (failure?: string) => void; onTurn?: (turnId: string) => void; started: boolean; finished: boolean };const activeTurns = new Map<string, TurnWaiter>();
 
 /** 查询活跃 turn（未指定会话时取第一个在跑的）。 */
 export function activeTurn(sessionID?: string) {
@@ -166,7 +174,7 @@ function dispatch(type: string, properties: JsonRecord, emit: AgentEmit) {
         case "session.error": {
             const sessionID = String(field(properties, "sessionID") || "");
             logger.warn("opencode session error", { ...properties });
-            completeTurn(sessionID, "failed", emit, String(field(field(properties, "error"), "message") || field(properties, "message") || "opencode 会话出错"));
+            completeTurn(sessionID, "failed", emit, sessionErrorText(properties));
             return;
         }
         case "session.idle":

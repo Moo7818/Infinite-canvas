@@ -399,10 +399,15 @@ export function startHttpServer() {
         }
     }));
 
-    /** 将 Codex 写操作串行化，避免多窗口在异步请求期间交叉修改会话。 */
+    /** 将 Codex 写操作串行化，避免多窗口在异步请求期间交叉修改会话；非 turn 引起的瞬时冲突短暂等待重试（500ms×4），仍冲突才报 409。 */
     function codexMutation(handler: (req: Request, res: Response) => unknown | Promise<unknown>) {
         return route(async (req, res) => {
-            if (!session.beginCodexMutation()) return res.status(409).json({ ok: false, code: "CONVERSATION_BUSY", error: "Codex 正在运行或正在切换会话，请稍后重试", state: session.conversationStateSnapshot });
+            let acquired = session.beginCodexMutation();
+            for (let attempt = 0; !acquired && attempt < 4 && !session.codexBusy; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                acquired = session.beginCodexMutation();
+            }
+            if (!acquired) return res.status(409).json({ ok: false, code: "CONVERSATION_BUSY", error: "Codex 正在运行或正在切换会话，请稍后重试", state: session.conversationStateSnapshot });
             try {
                 return await handler(req, res);
             } finally {
