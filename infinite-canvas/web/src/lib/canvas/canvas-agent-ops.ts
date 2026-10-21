@@ -43,7 +43,9 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
     (Array.isArray(ops) ? ops : []).forEach((op, index) => {
         if (!op?.type) return;
         if (op.type === "add_node") {
-            const nodeType = op.nodeType && isRegisteredNodeType(op.nodeType) ? op.nodeType : CanvasNodeType.Text;
+            // 显式传入但未注册的节点类型直接报错，避免静默回退成文本节点毁掉插件语义。
+            if (op.nodeType && !isRegisteredNodeType(op.nodeType)) throw new Error(i18n.t("canvas.agentOps.unknownNodeType", { type: op.nodeType, defaultValue: `未注册的节点类型：${op.nodeType}` }));
+            const nodeType = op.nodeType || CanvasNodeType.Text;
             const spec = getNodeSpec(nodeType);
             const node: CanvasNodeData = {
                 id: op.id || `${nodeType}-${Date.now()}-${index}`,

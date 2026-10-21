@@ -6,6 +6,15 @@ import type { CanvasNode, CanvasNodeType, CanvasSnapshot } from "./types.js";
 
 export type CanvasToolRequest = { name: "canvas_apply_ops"; input: Record<string, unknown> };
 
+/** 语义化插件节点工具与画布节点类型 ID 的映射。 */
+const PLUGIN_NODE_TYPES = {
+    canvas_create_character_node: "character:role",
+    canvas_create_scene_node: "scene:view",
+    canvas_create_prop_node: "prop:item",
+    canvas_create_grid_node: "grid:board",
+    canvas_create_film_node: "video:film",
+};
+
 /** 将上层画布工具调用转换为前端可执行的批量操作。 */
 export function buildCanvasToolRequest(name: ToolName, input: Record<string, unknown>, state: CanvasSnapshot | null): CanvasToolRequest {
     if (name === "canvas_apply_ops") return { name, input };
@@ -34,6 +43,19 @@ export function buildCanvasToolRequest(name: ToolName, input: Record<string, unk
         return applyOps([configNodeOp(configId, input, x, y), ...(input.autoRun ? [runGenerationOp(configId, mode, prompt)] : [])]);
     }
     if (name === "canvas_create_generation_flow") return applyOps(generationFlowOps(input, state));
+    const pluginNodeType = PLUGIN_NODE_TYPES[name as keyof typeof PLUGIN_NODE_TYPES];
+    if (pluginNodeType) {
+        const { title, x, y, width, height, ...fields } = input;
+        return applyOps([{
+            type: "add_node",
+            nodeType: pluginNodeType,
+            title: typeof title === "string" ? title : undefined,
+            position: { x: typeof x === "number" ? x : nextCanvasX(state), y: typeof y === "number" ? y : 0 },
+            width: typeof width === "number" ? width : undefined,
+            height: typeof height === "number" ? height : undefined,
+            metadata: cleanPluginMetadata(fields),
+        }]);
+    }
     if (name === "canvas_generate_text" || name === "canvas_generate_image" || name === "canvas_generate_video" || name === "canvas_generate_audio") {
         return applyOps(generationFlowOps({ ...input, mode: name.replace("canvas_generate_", ""), autoRun: true }, state));
     }
@@ -171,4 +193,9 @@ function findNode(state: CanvasSnapshot | null, id: string): CanvasNode | undefi
 /** 移除对象中未设置的生成参数。 */
 function cleanRecord(value: Record<string, unknown>) {
     return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== ""));
+}
+
+/** 移除插件节点 metadata 中的空值，避免空字段覆盖插件默认值。 */
+function cleanPluginMetadata(value: Record<string, unknown>) {
+    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== "" && !(Array.isArray(item) && item.length === 0)));
 }

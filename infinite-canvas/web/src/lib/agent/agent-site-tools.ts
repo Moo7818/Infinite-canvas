@@ -6,6 +6,7 @@ import { uploadImage } from "@/services/image-storage";
 import { imageAspectOptions, imageQualityOptions, imageScaleOptions } from "@/components/image-settings-panel";
 import { videoResolutionOptions, videoSecondsRange, videoSizeOptions } from "@/components/video-settings-panel";
 import type { CanvasAgentSnapshot } from "@/lib/canvas/canvas-agent-ops";
+import { getNodePluginId, listNodeDefinitions } from "@/lib/canvas/node-registry";
 import { clampVideoSeconds } from "@/lib/media-size";
 import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -17,6 +18,7 @@ import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 
 export const SITE_TOOL_NAMES = [
     "canvas_list_projects",
+    "canvas_list_node_types",
     "generation_get_status",
     "workbench_image_get_config",
     "workbench_image_generate",
@@ -39,6 +41,7 @@ function siteText(key: string, options?: Record<string, unknown>) {
 
 export const SITE_TOOL_LABELS: Record<SiteToolName, string> = {
     get canvas_list_projects() { return siteText("canvasList"); },
+    get canvas_list_node_types() { return siteText("canvasNodeTypes"); },
     get generation_get_status() { return siteText("generationStatus"); },
     get workbench_image_get_config() { return siteText("imageConfig"); },
     get workbench_image_generate() { return siteText("imageGenerate"); },
@@ -58,6 +61,8 @@ export async function runSiteTool(name: SiteToolName, input: SiteToolInput, navi
     switch (name) {
         case "canvas_list_projects":
             return listCanvasProjects(input);
+        case "canvas_list_node_types":
+            return listNodeTypes(input);
         case "generation_get_status":
             return getGenerationStatus(input, context.canvasSnapshot);
         case "workbench_image_get_config":
@@ -90,9 +95,9 @@ function getGenerationStatus(input: SiteToolInput, canvasSnapshot?: CanvasAgentS
 
     if (includeCanvas && canvasSnapshot) {
         canvasSnapshot.nodes.forEach((node) => {
-            const status = normalizeCanvasGenerationStatus(node.metadata?.status);
-            if (!status || (nodeIds.size && !nodeIds.has(node.id))) return;
             const metadata = node.metadata || {};
+            const status = normalizeCanvasGenerationStatus(metadata.status, metadata.generating, metadata.generateError);
+            if (!status || (nodeIds.size && !nodeIds.has(node.id))) return;
             if (!nodeIds.size && node.type !== "config" && status !== "running" && status !== "failed" && !metadata.generationMode && !metadata.generationType && !metadata.model) return;
             tasks.push({ id: node.id, source: "canvas", status, kind: metadata.generationMode || node.type, title: node.title, prompt: compactPrompt(metadata.prompt || metadata.composerContent), projectId: canvasSnapshot.projectId, error: metadata.errorDetails });
         });
@@ -116,11 +121,12 @@ function generationStatusOrder(status: GenerationStatus) {
     return status === "running" ? 0 : status === "queued" ? 1 : 2;
 }
 
-function normalizeCanvasGenerationStatus(status: unknown): GenerationStatus | null {
+function normalizeCanvasGenerationStatus(status: unknown, generating?: unknown, generateError?: unknown): GenerationStatus | null {
     if (status === "idle") return "idle";
-    if (status === "loading") return "running";
+    if (status === "loading" || status === "generating" || generating === true) return "running";
     if (status === "success") return "succeeded";
     if (status === "error") return "failed";
+    if (typeof generateError === "string" && generateError.trim()) return "failed";
     return null;
 }
 
@@ -144,6 +150,23 @@ function listCanvasProjects(input: SiteToolInput) {
         connectionCount: project.connections.length,
     }));
     return { total: filtered.length, page, pageSize, items, hint: siteText("canvasHint") };
+}
+
+function listNodeTypes(input: SiteToolInput) {
+    const pluginId = typeof input.pluginId === "string" ? input.pluginId : "";
+    const items = listNodeDefinitions()
+        .map((def) => ({
+            type: def.type,
+            title: def.title,
+            description: def.description,
+            pluginId: getNodePluginId(def.type),
+            defaultSize: def.defaultSize,
+            hasSourceHandle: def.hasSourceHandle !== false,
+            hasTargetHandle: def.hasTargetHandle !== false,
+            showInCreateMenu: def.showInCreateMenu !== false,
+        }))
+        .filter((item) => !pluginId || item.pluginId === pluginId);
+    return { total: items.length, items };
 }
 
 function getImageConfig() {

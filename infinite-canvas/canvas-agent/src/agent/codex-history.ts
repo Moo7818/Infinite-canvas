@@ -705,6 +705,12 @@ function toolName(name: string) {
     if (name === "site_navigate") return "打开页面";
     if (name === "canvas_list_projects") return "画布列表";
     if (name === "canvas_apply_ops") return "画布操作";
+    if (name === "canvas_list_node_types") return "节点类型列表";
+    if (name === "canvas_create_character_node") return "创建角色节点";
+    if (name === "canvas_create_scene_node") return "创建场景节点";
+    if (name === "canvas_create_prop_node") return "创建道具节点";
+    if (name === "canvas_create_grid_node") return "创建宫格节点";
+    if (name === "canvas_create_film_node") return "创建影片节点";
     if (name === "canvas_get_state") return "读取画布";
     if (name === "canvas_get_selection") return "读取选区";
     if (name === "canvas_export_snapshot") return "导出快照";
