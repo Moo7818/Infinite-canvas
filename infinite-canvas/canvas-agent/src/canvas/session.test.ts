@@ -605,6 +605,19 @@ test("没有附件时给出重新上传提示", () => {
     assert.throws(() => session.getTurnAttachment("first", "missing"), /没有可用的图片附件，请提示用户重新上传/);
 });
 
+test("更新路径同样校验图片字段", async (t) => {
+    const session = new CanvasSession();
+    const first = connect(session, "first");
+    t.after(() => first.close());
+    session.updateState({ ...snapshot("canvas-first"), nodes: [{ id: "char-1", type: "character:role", position: { x: 0, y: 0 }, width: 100, height: 100, metadata: {} }] } as never, "first");
+
+    await assert.rejects(session.callTool("canvas_update_node", { id: "char-1", metadata: { faceImages: ["/a.jpg"] } }), /只能使用 data:image/);
+    await assert.rejects(session.callTool("canvas_update_node", { id: "char-1", metadata: { faceImages: Array(4).fill("data:image/png;base64,aW1hZ2U=") } }), /faceImages 最多 3 张/);
+    await assert.rejects(session.callTool("canvas_apply_ops", { ops: [{ type: "update_node", id: "char-1", patch: { metadata: { faceImages: ["/a.jpg"] } } }] }), /只能使用 data:image/);
+    await assert.rejects(session.callTool("canvas_create_node", { nodeType: "image", metadata: { content: "/a.jpg" } }), /只能使用 data:image/);
+    assert.equal(first.event("tool_call"), undefined);
+});
+
 /** 创建用于测试的画布 SSE 连接。 */
 function connect(session: CanvasSession, clientId: string, activeThreadId = "") {
     const response = new FakeSseResponse();

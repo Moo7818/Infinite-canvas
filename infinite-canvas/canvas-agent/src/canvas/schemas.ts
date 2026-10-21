@@ -123,6 +123,46 @@ const imageRefSchema = z.string().refine((value) => /^data:image\//i.test(value)
 /** 图片数组字段：格式与插件侧上限一起校验，超量直接报错，避免拖到生图时才失败。 */
 const imageListSchema = (max: number, label: string) => z.array(imageRefSchema).max(max, { message: `${label} 最多 ${max} 张图片` });
 
+/** 插件节点的图片字段上限，与插件侧常量保持一致（character/scene/prop/video）。 */
+export const IMAGE_FIELD_LIMITS: Record<string, Array<{ field: string; max: number }>> = {
+    "character:role": [{ field: "faceImages", max: 3 }, { field: "outfitImages", max: 2 }, { field: "extraImages", max: 3 }],
+    "scene:view": [{ field: "envImages", max: 3 }, { field: "lightImages", max: 2 }, { field: "extraImages", max: 2 }, { field: "styleImage", max: 1 }],
+    "prop:item": [{ field: "materialImages", max: 2 }, { field: "detailImages", max: 3 }, { field: "extraImages", max: 2 }, { field: "styleImage", max: 1 }],
+    "video:film": [{ field: "refs", max: 9 }],
+};
+
+/** 判断字符串是否是合法图片地址：data:image/... dataURL 或 http(s) URL。 */
+function isImageAddress(value: unknown) {
+    return typeof value === "string" && (/^data:image\//i.test(value) || /^https?:\/\//i.test(value));
+}
+
+/** 校验插件节点图片字段（格式 + 数量上限），供更新路径复用，避免绕过创建时的收紧。 */
+export function assertNodeImageFields(nodeType: string, ...payloads: Array<Record<string, unknown> | undefined>) {
+    for (const { field, max } of IMAGE_FIELD_LIMITS[nodeType] || []) {
+        for (const payload of payloads) {
+            const value = payload?.[field];
+            if (value === undefined || value === null) continue;
+            const list = Array.isArray(value) ? value : [value];
+            if (list.length > max) throw new Error(`${field} 最多 ${max} 张图片`);
+            if (!list.every((item) => isImageAddress(item))) {
+                throw new Error(`${field} 只能使用 data:image/... dataURL 或 http(s) URL；file://、blob:、相对路径和画布节点 ID 不支持，用户上传的图片先用 canvas_create_attachment_nodes 生成图片节点`);
+            }
+        }
+    }
+}
+
+/** 校验核心图片节点的图片地址，避免创建出空白图片节点。 */
+export function assertImageContent(nodeType: string, ...payloads: Array<Record<string, unknown> | undefined>) {
+    if (nodeType !== "image") return;
+    for (const payload of payloads) {
+        const content = payload?.content;
+        if (typeof content !== "string" || !content) continue;
+        if (!isImageAddress(content)) {
+            throw new Error("图片节点 content 只能使用 data:image/... dataURL 或 http(s) URL；file://、blob:、相对路径和画布节点 ID 不支持，用户上传的图片先用 canvas_create_attachment_nodes 生成图片节点");
+        }
+    }
+}
+
 const characterNodeSchema = z.object({
     ...pluginNodeBase,
     name: z.string().optional(),

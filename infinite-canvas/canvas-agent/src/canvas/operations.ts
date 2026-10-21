@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 
 import type { ToolName } from "./schemas.js";
+import { assertImageContent, assertNodeImageFields } from "./schemas.js";
 import { nextCanvasX } from "./tools.js";
 import type { CanvasNode, CanvasNodeType, CanvasSnapshot } from "./types.js";
 
@@ -17,9 +18,27 @@ const PLUGIN_NODE_TYPES = {
 
 /** 将上层画布工具调用转换为前端可执行的批量操作。 */
 export function buildCanvasToolRequest(name: ToolName, input: Record<string, unknown>, state: CanvasSnapshot | null): CanvasToolRequest {
-    if (name === "canvas_apply_ops") return { name, input };
+    if (name === "canvas_apply_ops") {
+        const ops = (input as { ops?: Array<Record<string, unknown>> }).ops || [];
+        for (const op of ops) {
+            if (op.type === "add_node") {
+                const nodeType = String(op.nodeType || "text");
+                assertNodeImageFields(nodeType, op.metadata as Record<string, unknown> | undefined);
+                assertImageContent(nodeType, op.metadata as Record<string, unknown> | undefined);
+            }
+            if (op.type === "update_node") {
+                const nodeType = String(findNode(state, String(op.id || ""))?.type || "");
+                const metadata = op.metadata as Record<string, unknown> | undefined;
+                const patchMetadata = (op.patch as Record<string, unknown> | undefined)?.metadata as Record<string, unknown> | undefined;
+                assertNodeImageFields(nodeType, metadata, patchMetadata);
+                assertImageContent(nodeType, metadata, patchMetadata);
+            }
+        }
+        return { name, input };
+    }
     if (name === "canvas_create_node") {
         const data = input as { nodeType: CanvasNodeType; title?: string; x?: number; y?: number; width?: number; height?: number; metadata?: Record<string, unknown> };
+        assertImageContent(data.nodeType, data.metadata);
         return applyOps([{ type: "add_node", nodeType: data.nodeType, title: data.title, position: { x: data.x ?? nextCanvasX(state), y: data.y ?? 0 }, width: data.width, height: data.height, metadata: data.metadata }]);
     }
     if (name === "canvas_create_text_node") {
@@ -61,6 +80,10 @@ export function buildCanvasToolRequest(name: ToolName, input: Record<string, unk
     }
     if (name === "canvas_update_node") {
         const data = input as { id: string; patch?: Record<string, unknown>; metadata?: Record<string, unknown> };
+        const nodeType = String(findNode(state, data.id)?.type || "");
+        const patchMetadata = data.patch?.metadata as Record<string, unknown> | undefined;
+        assertNodeImageFields(nodeType, data.metadata, patchMetadata);
+        assertImageContent(nodeType, data.metadata, patchMetadata);
         return applyOps([{ type: "update_node", id: data.id, patch: data.patch, metadata: data.metadata }]);
     }
     if (name === "canvas_update_node_text") {
