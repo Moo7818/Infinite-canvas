@@ -6,6 +6,10 @@
 
 + [调整] Agent 模型列表只展示 opencode 官方免费模型（`opencode/*-free`），不再列出其他 provider 的模型，避免误选余额不足或已停用的通道。
 
++ [修复] 侧边栏图片附件跨轮不再失效：同一标签页最近 24 张附件继续保留，新增 `canvas_list_attachments` 查询可用附件，提示词会同时列出本轮与此前附件；附件文件改写到工作空间 `.attachments/<attachmentId>.<扩展名>`，不再使用 `%TEMP%` 随机文件名、不再在 turn 结束时删除，`gif/webp/avif` 等扩展名也按真实类型落盘。
+
++ [修复] MCP 自由对象参数（`metadata`、`patch`）传 JSON 字符串时自动解析为对象；图片字段（`faceImages`、`styleImage`、`refs` 等）显式拒绝 `file://`、`blob:`、相对路径和画布节点 ID，并提示先经 `canvas_create_attachment_nodes` 转成图片节点。
+
 + [调整] opencode 运行时从产品目录拆分到仓库根 `opencode-runtime/`（独立固定 `opencode-ai@1.19.3`，`node_modules/` 与 `workspace/` 不入库），canvas-agent 不再携带该依赖；serve 以运行时目录为工作目录，站点工作空间默认落在 `opencode-runtime/workspace/site/`，会话数据库仍与桌面版共享。
 
 + [新增] Agent 侧边栏支持以 opencode 作为执行后端（harness）：`canvas-agent.json` 里 `"harness": "opencode"`（现为默认值），`/agent/codex/*` 端点路径与前端事件合同不变；启动自动拉起 opencode serve 并注入 infinite-canvas MCP，会话/模型列表与流式回复合 Codex 表现一致，旧 Codex 线程自动重建为 opencode 会话；设回 `"harness": "codex"` 可回退原 Codex 流程。opencode CLI 由仓库根独立运行时 `opencode-runtime/` 提供（固定 `opencode-ai@1.19.3`），并与桌面版 opencode 共享会话数据库。
