@@ -16,9 +16,9 @@
 | [Grsai 渠道集成](./grsai-integration.md) | 接口行为/三故障判定/版本确认/async 状态 |
 | [MCP 工具清单](./mcp-tools.md) | 画布 MCP 34 工具中英对照/参数/边界 |
 | [MCP 调研简报](./mcp-research-brief.md) | libtv 对比/插件工具扩展/harness 适配三线结论与待拍板项 |
-| [libtv MCP 能力对比](./mcp-libtv-comparison.md) | libtv 85 工具面 vs 本 MCP 34 工具差异与可借鉴设计 |
-| [插件 MCP 工具方案](./mcp-plugin-tools-plan.md) | 插件节点 MCP 扩展链路/候选工具/扩展点与坑 |
-| [harness 适配](./harness-adaptation.md) | 脱离 Codex：耦合清单/三条适配路线/opencode 路径 |
+| [libtv MCP 能力对比](./mcp-research/mcp-libtv-comparison.md) | libtv 85 工具面 vs 本 MCP 34 工具差异与可借鉴设计 |
+| [插件 MCP 工具方案](./mcp-research/mcp-plugin-tools-plan.md) | 插件节点 MCP 扩展链路/候选工具/扩展点与坑 |
+| [harness 适配](./mcp-research/harness-adaptation.md) | 脱离 Codex：耦合清单/三条适配路线/opencode 路径 |
 | [上游摘要](./upstream-summary.md) | 上游功能/部署文档指路（不复制原文） |
 
 ## AI 行为约束（按需加载）

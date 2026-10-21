@@ -1,7 +1,7 @@
 # 简报：画布 MCP 生态三线调研（libtv 对比 / 插件工具扩展 / harness 适配）
 
 > 一页结论版。详细分析见三篇正文：
-> [libtv MCP 能力对比](./mcp-libtv-comparison.md) ｜ [插件节点 MCP 工具方案](./mcp-plugin-tools-plan.md) ｜ [脱离 Codex 的 harness 适配](./harness-adaptation.md)
+> [libtv MCP 能力对比](./mcp-research/mcp-libtv-comparison.md) ｜ [插件节点 MCP 工具方案](./mcp-research/mcp-plugin-tools-plan.md) ｜ [脱离 Codex 的 harness 适配](./mcp-research/harness-adaptation.md)
 
 ## TL;DR
 
