@@ -128,6 +128,10 @@ export type CanvasNodeDefinition = {
     Panel?: ComponentType<{ ctx: CanvasNodeContext; onClose: () => void }>;
     toolbar?: (ctx: CanvasNodeContext) => CanvasNodeToolbarItem[];
     onDoubleClick?: (ctx: CanvasNodeContext) => boolean; // Return true when handled.
+    // Host-callable custom generation for this node (Agent run_generation, toolbar, etc.).
+    // Reads inputs from ctx.node.metadata, generates via ctx.ai, writes back to the node.
+    // When absent, the host falls back to its built-in generation flow.
+    generate?: (ctx: CanvasNodeContext) => Promise<void>;
 };
 
 // Application capabilities available while a plugin starts.

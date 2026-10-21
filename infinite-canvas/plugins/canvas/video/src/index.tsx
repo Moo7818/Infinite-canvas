@@ -1,7 +1,7 @@
 // 影片节点:表单填参（模型自适应）→ 调参考视频生成 → 版本管理。
 // 生成结果自动追加版本并写回本节点展示;下游输出当前选中版本视频。
 import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
-import type { CanvasNodeContentProps, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
+import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import {
     FieldGroup,
     ImagesField,
@@ -59,6 +59,41 @@ function filledCount(m: CanvasNodeMetadata): number {
     }).length;
     const imageCount = Array.isArray(r.refs) && (r.refs as unknown[]).some((v) => typeof v === "string" && v.length > 0) ? 1 : 0;
     return textCount + imageCount;
+}
+
+// 影片生成核心：从 metadata 取提示词/参考图/参数→生成视频→写回新版本。Panel 按钮与宿主(Agent run_generation)共用。
+export async function runVideoGenerate(ctx: CanvasNodeContext, controller: AbortController): Promise<void> {
+    const m = ctx.node.metadata || {};
+    ctx.updateMetadata({ generating: true, generateError: undefined });
+    try {
+        const promptText = ((m as { prompt?: unknown }).prompt as string) || "";
+        if (!promptText.trim()) throw new Error("请先填写提示词");
+        const refs = await Promise.all(((m.refs as unknown) instanceof Array ? (m.refs as string[]) : []).map((u) => downscaleImage(u)));
+        const chosen = (typeof m.model === "string" && m.model) || ctx.ai.defaultModel("video");
+        const spec = specForModel(chosen);
+        const ratio = typeof m.ratio === "string" && spec.ratios.includes(m.ratio) ? m.ratio : spec.ratios[0];
+        const secondsMax = spec.seconds.max;
+        const secs = Math.min(Math.max(Number(m.seconds) || spec.seconds.min, spec.seconds.min), secondsMax);
+        console.info(`[video] 提交生成 参考图${refs.length}张 时长${secs}s`);
+        const res = await ctx.ai.generateVideo(promptText, { references: refs, model: chosen, size: ratio, seconds: String(secs), signal: controller.signal });
+        if (!res.url) throw new Error("生成未返回视频");
+        const url = res.url;
+        // 节点宽高自适应视频比例：已知宽高按 300 宽等比换算高并夹紧，+30 留给底部状态条；未知则回退按媒体尺寸适配。
+        if (res.width && res.height) {
+            const imgH = Math.min(520, Math.max(200, Math.round((300 * res.height) / res.width)));
+            ctx.updateNode({ width: 300, height: imgH + 30 });
+        } else {
+            await fitNodeToImage((p) => ctx.updateNode(p), url);
+        }
+        // 函数式追加：与工具条导入并发时以前面最新 state 为准，不丢更新。
+        ctx.updateMetadata((prev) => versionAppendPatch(prev, url, promptText));
+    } catch (e) {
+        const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
+        // 连接层失败（无响应）与业务失败要区分：前者任务可能已在后台建成，提示用户不要连点。
+        const msg = /network error|ERR_|Failed to fetch|timeout|ECONN|aborted/i.test(raw) && raw !== "已取消" ? `${raw}（连接中断，后台任务可能仍在执行；请勿连点，稍后手动重试）` : raw;
+        ctx.updateMetadata({ generating: false, generateError: msg });
+        throw new Error(msg);
+    }
 }
 
 function VideoContent({ ctx }: CanvasNodeContentProps) {
@@ -136,15 +171,6 @@ function VideoPanel({ ctx, onClose }: CanvasNodePanelProps) {
     const versions = resolveVersions(m);
     const activeId = pickActiveId(versions, m.activeVersionId);
 
-    const fitVideo = async (w: number | undefined, h: number | undefined, url: string) => {
-        if (w && h) {
-            const imgH = Math.min(520, Math.max(200, Math.round((300 * h) / w)));
-            ctx.updateNode({ width: 300, height: imgH + 30 });
-        } else {
-            await fitNodeToImage((p) => ctx.updateNode(p), url);
-        }
-    };
-
     const switchVersion = async (id: string) => {
         const v = versions.find((item) => item.id === id);
         if (!v) return;
@@ -168,27 +194,11 @@ function VideoPanel({ ctx, onClose }: CanvasNodePanelProps) {
         }
         setRunning(true);
         setError("");
-        set({ generating: true, generateError: undefined });
         try {
-            const promptText = ((m as { prompt?: unknown }).prompt as string) || "";
-            if (!promptText.trim()) throw new Error("请先填写提示词");
-            const refs = await Promise.all(((m.refs as unknown) instanceof Array ? (m.refs as string[]) : []).map((u) => downscaleImage(u)));
-            const chosen = model || ctx.ai.defaultModel("video");
-            const secs = Math.min(Math.max(Number(m.seconds) || spec.seconds.min, spec.seconds.min), secondsMax);
-            console.info(`[video] 提交生成 参考图${refs.length}张 时长${secs}s`);
-            const res = await ctx.ai.generateVideo(promptText, { references: refs, model: chosen, size: ratio, seconds: String(secs), signal: controller.signal });
-            if (!res.url) throw new Error("生成未返回视频");
-            const url = res.url;
-            await fitVideo(res.width, res.height, url);
-            // 函数式追加：与工具条导入并发时以前面最新 state 为准，不丢更新。
-            set((prev) => versionAppendPatch(prev, url, promptText));
+            await runVideoGenerate(ctx, controller);
         } catch (e) {
-            const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
-            // 连接层失败（无响应）与业务失败要区分：前者任务可能已在后台建成，提示用户不要连点。
-            const msg = /network error|ERR_|Failed to fetch|timeout|ECONN|aborted/i.test(raw) && raw !== "已取消" ? `${raw}（连接中断，后台任务可能仍在执行；请勿连点，稍后手动重试）` : raw;
-            setError(msg);
-            // 错误持久化：面板关闭重开仍可见；节点卡片底部同步红标。
-            set({ generating: false, generateError: msg });
+            // 错误文案与 metadata.generateError 已在核心函数内处理，这里同步面板内的即时错误态。
+            setError(e instanceof Error ? e.message : String(e));
         } finally {
             guard.end();
         }
@@ -369,6 +379,15 @@ export default definePlugin({
                 if (!activeImageUrl(ctx.node.metadata || {})) return false;
                 ctx.updateMetadata({ previewOpen: true });
                 return true;
+            },
+            // 宿主可程序化触发（Agent 的 run_generation）：复用与面板「生成」按钮相同的生成核心。
+            generate: async (ctx) => {
+                if ((ctx.node.metadata || {}).generating) return; // 已有在途生成，避免重复触发
+                try {
+                    await runVideoGenerate(ctx, new AbortController());
+                } catch {
+                    /* 错误已写入 metadata.generateError，由节点卡片展示 */
+                }
             },
         },
     ],

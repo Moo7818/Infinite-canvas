@@ -1,7 +1,7 @@
 // 角色节点:点击弹出表单 → 拼装提示词 → 参考图生成角色设定图。
 // 生成结果写回本节点展示;拼装文本经 resource 输出,可连给下游节点消费。
 import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
-import type { CanvasNodeContentProps, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
+import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import {
     FieldGroup,
     ImagesField,
@@ -87,6 +87,30 @@ function filledCount(m: CanvasNodeMetadata): number {
     }).length;
     const imageCount = [hasImages(r.faceImage, r.faceImages), hasImages(r.outfitImage, r.outfitImages), hasImages(r.extraImage, r.extraImages)].filter(Boolean).length;
     return textCount + imageCount;
+}
+
+// 角色生成核心：从 metadata 拼提示词→压参考图→生图→写回新版本。Panel 按钮与宿主(Agent run_generation)共用。
+export async function runCharacterGenerate(ctx: CanvasNodeContext, controller: AbortController): Promise<void> {
+    const m = ctx.node.metadata || {};
+    ctx.updateMetadata({ generating: true, generateError: undefined });
+    try {
+        const { prompt, references } = buildCharacterPrompt(m as CharacterFields);
+        const chosen = (typeof m.model === "string" && m.model) || ctx.ai.defaultModel("image");
+        console.info(`[character] 提交生成 参考图${references.length}张`);
+        // 引用图压到 1536：边缘 413 拒收 10MB 级 body，只压引用，输出不动。
+        const refs = await Promise.all(references.map((u) => downscaleImage(u)));
+        const res = await ctx.ai.generateImage(prompt, { references: refs, model: chosen, size: "16:9", signal: controller.signal });
+        if (!res.images.length) throw new Error("生成未返回图片");
+        const url = res.images[0];
+        await fitNodeToImage((p) => ctx.updateNode(p), url);
+        // 成功：追加为新版本并选中，versionAppendPatch 会清 generating。
+        ctx.updateMetadata((prev) => versionAppendPatch(prev, url, prompt));
+    } catch (e) {
+        const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
+        const msg = /network error|ERR_|Failed to fetch|timeout|ECONN|aborted/i.test(raw) && raw !== "已取消" ? `${raw}（连接中断，后台任务可能仍在执行；请勿连点，稍后手动重试）` : raw;
+        ctx.updateMetadata({ generating: false, generateError: msg });
+        throw new Error(msg);
+    }
 }
 
 function CharacterContent({ ctx }: CanvasNodeContentProps) {
@@ -205,28 +229,11 @@ function CharacterPanel({ ctx, onClose }: CanvasNodePanelProps) {
         }
         setRunning(true);
         setError("");
-        set({ generating: true, generateError: undefined });
         try {
-            const { prompt, references } = buildCharacterPrompt(m as CharacterFields);
-            const chosen = model || ctx.ai.defaultModel("image");
-            // 默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
-            console.info(`[character] 提交生成 参考图${references.length}张`);
-            // 引用图压到 1536：边缘 413 拒收 10MB 级 body，只压引用，输出不动。
-            const refs = await Promise.all(references.map((u) => downscaleImage(u)));
-            const res = await ctx.ai.generateImage(prompt, { references: refs, model: chosen, size: "16:9", signal: controller.signal });
-            if (!res.images.length) throw new Error("生成未返回图片");
-            const url = res.images[0];
-            await fitNode(url);
-            // 每次生成自动追加为新版本并选中；老节点首次生成时把旧图收为版本 1。
-            // 函数式追加：与工具条导入并发时以前面最新 state 为准，不丢更新。
-            set((prev) => versionAppendPatch(prev, url, prompt));
+            await runCharacterGenerate(ctx, controller);
         } catch (e) {
-            const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
-            // 连接层失败（无响应）与业务失败要区分：前者任务可能已在后台建成，提示用户不要连点。
-            const msg = /network error|ERR_|Failed to fetch|timeout|ECONN|aborted/i.test(raw) && raw !== "已取消" ? `${raw}（连接中断，后台任务可能仍在执行；请勿连点，稍后手动重试）` : raw;
-            setError(msg);
-            // 错误持久化：面板关闭重开仍可见；节点卡片底部同步红标。
-            set({ generating: false, generateError: msg });
+            // 错误文案与 metadata.generateError 已在核心函数内处理，这里同步面板内的即时错误态。
+            setError(e instanceof Error ? e.message : String(e));
         } finally {
             guard.end();
         }
@@ -441,6 +448,15 @@ export default definePlugin({
                 if (!activeImageUrl(ctx.node.metadata || {})) return false;
                 ctx.updateMetadata({ previewOpen: true });
                 return true;
+            },
+            // 宿主可程序化触发（Agent 的 run_generation）：复用与面板「生成」按钮相同的生成核心。
+            generate: async (ctx) => {
+                if ((ctx.node.metadata || {}).generating) return; // 已有在途生成，避免重复触发
+                try {
+                    await runCharacterGenerate(ctx, new AbortController());
+                } catch {
+                    /* 错误已写入 metadata.generateError，由节点卡片展示 */
+                }
             },
         },
     ],

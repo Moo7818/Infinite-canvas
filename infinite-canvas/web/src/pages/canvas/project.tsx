@@ -70,6 +70,7 @@ import {
     sourceNodeReferenceImages,
 } from "@/lib/canvas/canvas-generation-helpers";
 import { getNodeDefinition, isBuiltinNodeType as isBuiltinType, useNodeRegistryVersion } from "@/lib/canvas/node-registry";
+import { buildNodeContext } from "@/lib/canvas/plugin-node-context";
 import { registerBuiltinNodes } from "@/components/canvas/nodes/builtin-nodes";
 import { CanvasPluginManagerModal } from "@/components/canvas/canvas-plugin-manager-modal";
 import { CanvasRefreshShell } from "@/components/canvas/canvas-refresh-shell";
@@ -2311,6 +2312,19 @@ function InfiniteCanvasPage() {
     const handleGenerateNode = useCallback(
         async (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string) => {
             const sourceNode = nodesRef.current.find((node) => node.id === nodeId);
+            // 插件节点自带 generate 时优先走它（Agent 的 run_generation 才能触发角色/场景等自定义生成），否则继续内置流程。
+            const pluginGenerate = sourceNode ? getNodeDefinition(sourceNode.type)?.generate : undefined;
+            if (sourceNode && pluginGenerate) {
+                setRunningNodeId(nodeId);
+                try {
+                    await pluginGenerate(buildNodeContext(pluginHost, sourceNode, theme, Math.max(viewportRef.current.k, 0.05)));
+                } catch (error) {
+                    message.error(error instanceof Error ? error.message : t("canvas.projectPage.generationFailed"));
+                } finally {
+                    setRunningNodeId(null);
+                }
+                return;
+            }
             const generationConfig = buildGenerationConfig(effectiveConfig, sourceNode, mode);
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
@@ -2747,7 +2761,7 @@ function InfiniteCanvasPage() {
                 setRunningNodeId(null);
             }
         },
-        [completeVideoNodeTask, effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, startGenerationRequest, t],
+        [completeVideoNodeTask, effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, pluginHost, startGenerationRequest, t, theme],
     );
     useEffect(() => {
         generateNodeRef.current = handleGenerateNode;

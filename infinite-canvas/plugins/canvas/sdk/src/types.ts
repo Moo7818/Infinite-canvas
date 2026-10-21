@@ -298,6 +298,9 @@ export type CanvasNodeDefinition = {
     Panel?: ComponentType<CanvasNodePanelProps>; // 节点下方面板(自定义)
     toolbar?: (ctx: CanvasNodeContext) => CanvasNodeToolbarItem[];
     onDoubleClick?: (ctx: CanvasNodeContext) => boolean; // 返回 true 表示已处理
+    // 宿主可程序化触发的本节点自定义生成(Agent 的 run_generation、工具条等走这里)。
+    // 从 ctx.node.metadata 读入参、用 ctx.ai 生成、写回节点。不声明则回退宿主内置生成流程。
+    generate?: (ctx: CanvasNodeContext) => Promise<void>;
 };
 
 // ---------------------------------------------------------------------------

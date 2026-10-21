@@ -1,7 +1,7 @@
 // 宫格调度节点:锁死 2*2 四格，按名引用角色/空间节点，调度文档拼装提示词，一次生成四帧静帧。
 // 图片全部活引用（取所选节点当前选中版本图）；生成结果自动追加版本并写回本节点展示;下游输出当前选中版本图。
 import { definePlugin, useEffect, useState } from "@infinite-canvas/plugin-sdk";
-import type { CanvasNodeContentProps, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
+import type { CanvasNodeContentProps, CanvasNodeContext, CanvasNodeData, CanvasNodeMetadata, CanvasNodePanelProps } from "@infinite-canvas/plugin-sdk";
 import {
     FieldGroup,
     activeImageUrl,
@@ -188,6 +188,52 @@ async function shrinkForReading(src: string, maxEdge = 768): Promise<string> {
     }
 }
 
+// 宫格生成核心：活引用解析出场/空间→调度展开(LLM)→拼终稿提示词→压参考图→生图→写回新版本。Panel 按钮与宿主(Agent run_generation)共用。
+export async function runGridGenerate(ctx: CanvasNodeContext, controller: AbortController): Promise<void> {
+    const m = ctx.node.metadata || {};
+    ctx.updateMetadata({ generating: true, generateError: undefined, expandError: undefined });
+    try {
+        const live = resolveCast(ctx.getNodes(), ctx.node.metadata || {});
+        const fields = { ...(m as GridFields), characters: live.characters, spaceName: live.spaceName, spaceImages: live.spaceImages };
+        const { references } = buildGridPrompt(fields);
+        const rawDoc = ((m as GridFields).doc || "");
+        const chosen = (typeof m.model === "string" && m.model) || ctx.ai.defaultModel("image");
+        // 第一段：调度展开（多模态，LLM 可见参考图）；无回退——失败或空返回直接中断，不调生图。
+        let expanded = "";
+        try {
+            const readingRefs = await Promise.all(references.map((u) => shrinkForReading(u)));
+            const exp = await ctx.ai.generateText(buildExpansionInput(live.characters, live.spaceName, live.spaceImages, rawDoc), {
+                system: EXPANSION_SYSTEM,
+                model: ctx.ai.defaultModel("text"),
+                images: readingRefs,
+                signal: controller.signal,
+            });
+            if (exp.text && exp.text.trim()) expanded = exp.text.trim();
+        } catch (e) {
+            throw new Error(`调度展开失败：${e instanceof Error ? e.message : String(e)}`);
+        }
+        if (!expanded) throw new Error("调度展开返回空，已中断（未调用生图）");
+        const { prompt } = buildGridPrompt({ ...fields, doc: expanded });
+        // 宫格默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
+        console.info(`[grid] 提交生成 参考图${references.length}张${expanded ? "" : "（调度展开回退原文）"}`);
+        // 引用图压到 1536：边缘 413 拒收 10MB 级 body，只压引用，输出不动。
+        const refs = await Promise.all(references.map((u) => downscaleImage(u)));
+        const res = await ctx.ai.generateImage(prompt, { references: refs, model: chosen, size: "16:9", signal: controller.signal });
+        if (!res.images.length) throw new Error("生成未返回图片");
+        const url = res.images[0];
+        await fitNodeToImage((p) => ctx.updateNode(p), url);
+        // 每次生成自动追加为新版本并选中；老节点首次生成时把旧图收为版本 1。
+        // 函数式追加：与工具条导入并发时以前面最新 state 为准，不丢更新。
+        ctx.updateMetadata((prev) => ({ ...versionAppendPatch(prev, url, prompt), expanded, expandedFrom: rawDoc, expandError: undefined }));
+    } catch (e) {
+        const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
+        // 连接层失败（无响应）与业务失败要区分：前者任务可能已在后台建成，提示用户不要连点。
+        const msg = /network error|ERR_|Failed to fetch|timeout|ECONN|aborted/i.test(raw) && raw !== "已取消" ? `${raw}（连接中断，后台任务可能仍在执行；请勿连点，稍后手动重试）` : raw;
+        ctx.updateMetadata({ generating: false, generateError: msg });
+        throw new Error(msg);
+    }
+}
+
 function GridContent({ ctx }: CanvasNodeContentProps) {
     const m = ctx.node.metadata || {};
     const result = activeImageUrl(m);
@@ -303,47 +349,11 @@ function GridPanel({ ctx, onClose }: CanvasNodePanelProps) {
         }
         setRunning(true);
         setError("");
-        set({ generating: true, generateError: undefined, expandError: undefined });
         try {
-            const live = resolveCast(ctx.getNodes(), ctx.node.metadata || {});
-            const fields = { ...(m as GridFields), characters: live.characters, spaceName: live.spaceName, spaceImages: live.spaceImages };
-            const { references } = buildGridPrompt(fields);
-            const rawDoc = ((m as GridFields).doc || "");
-            const chosen = model || ctx.ai.defaultModel("image");
-            // 第一段：调度展开（多模态，LLM 可见参考图）；无回退——失败或空返回直接中断，不调生图。
-            let expanded = "";
-            try {
-                const readingRefs = await Promise.all(references.map((u) => shrinkForReading(u)));
-                const exp = await ctx.ai.generateText(buildExpansionInput(live.characters, live.spaceName, live.spaceImages, rawDoc), {
-                    system: EXPANSION_SYSTEM,
-                    model: ctx.ai.defaultModel("text"),
-                    images: readingRefs,
-                    signal: controller.signal,
-                });
-                if (exp.text && exp.text.trim()) expanded = exp.text.trim();
-            } catch (e) {
-                throw new Error(`调度展开失败：${e instanceof Error ? e.message : String(e)}`);
-            }
-            if (!expanded) throw new Error("调度展开返回空，已中断（未调用生图）");
-            const { prompt } = buildGridPrompt({ ...fields, doc: expanded });
-            // 宫格默认 16:9；画质位由宿主全局设置决定（建议 2K），插件侧无 quality 通道。
-            console.info(`[grid] 提交生成 参考图${references.length}张${expanded ? "" : "（调度展开回退原文）"}`);
-            // 引用图压到 1536：边缘 413 拒收 10MB 级 body，只压引用，输出不动。
-            const refs = await Promise.all(references.map((u) => downscaleImage(u)));
-            const res = await ctx.ai.generateImage(prompt, { references: refs, model: chosen, size: "16:9", signal: controller.signal });
-            if (!res.images.length) throw new Error("生成未返回图片");
-            const url = res.images[0];
-            await fitNode(url);
-            // 每次生成自动追加为新版本并选中；老节点首次生成时把旧图收为版本 1。
-            // 函数式追加：与工具条导入并发时以前面最新 state 为准，不丢更新。
-            set((prev) => ({ ...versionAppendPatch(prev, url, prompt), expanded, expandedFrom: rawDoc, expandError: undefined }));
+            await runGridGenerate(ctx, controller);
         } catch (e) {
-            const raw = controller.signal.aborted ? "已取消" : e instanceof Error ? e.message : String(e);
-            // 连接层失败（无响应）与业务失败要区分：前者任务可能已在后台建成，提示用户不要连点。
-            const msg = /network error|ERR_|Failed to fetch|timeout|ECONN|aborted/i.test(raw) && raw !== "已取消" ? `${raw}（连接中断，后台任务可能仍在执行；请勿连点，稍后手动重试）` : raw;
-            setError(msg);
-            // 错误持久化：面板关闭重开仍可见；节点卡片底部同步红标。
-            set({ generating: false, generateError: msg });
+            // 错误文案与 metadata.generateError 已在核心函数内处理，这里同步面板内的即时错误态。
+            setError(e instanceof Error ? e.message : String(e));
         } finally {
             guard.end();
         }
@@ -595,6 +605,15 @@ export default definePlugin({
                 if (!activeImageUrl(ctx.node.metadata || {})) return false;
                 ctx.updateMetadata({ previewOpen: true });
                 return true;
+            },
+            // 宿主可程序化触发（Agent 的 run_generation）：复用与面板「生成」按钮相同的生成核心。
+            generate: async (ctx) => {
+                if ((ctx.node.metadata || {}).generating) return; // 已有在途生成，避免重复触发
+                try {
+                    await runGridGenerate(ctx, new AbortController());
+                } catch {
+                    /* 错误已写入 metadata.generateError，由节点卡片展示 */
+                }
             },
         },
     ],
