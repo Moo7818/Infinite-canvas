@@ -1,0 +1,45 @@
+{
+  "name": "video-analyzer",
+  "version": "3.2.0",
+  "description": "Native multimodal video analysis using MiMo-V2.5. Default output is a comprehensive multi-dimensional report covering content overview, script breakdown, shot language, cinematography style, aesthetics, and competitor analysis. Also supports focused script breakdown and competitor analysis modes.",
+  "author": "SOLO",
+  "triggers": [
+    "分析视频",
+    "视频分析",
+    "视频拆解",
+    "镜头语言分析",
+    "摄影风格分析",
+    "美学分析",
+    "剧本提取",
+    "竞品分析",
+    "拆解视频",
+    "视频内容"
+  ],
+  "modes": {
+    "general": "全维度立体分析报告 (default) - 内容概览+剧本拆解+镜头语言+摄影风格+美学+竞品",
+    "script": "剧本拆解 - shot-by-shot storyboard + dialogue",
+    "competitor": "竞品分析 - marketing strategy + creative scoring"
+  },
+  "dependencies": {
+    "python": ">=3.8",
+    "pip": [
+      "requests"
+    ],
+    "system": [
+      "ffmpeg"
+    ]
+  },
+  "config": {
+    "env_var": "MIMO_API_KEY",
+    "api_base": "https://api.xiaomimimo.com/v1/chat/completions",
+    "model": "mimo-v2.5",
+    "max_file_size_mb": 50,
+    "max_output_tokens": 16384,
+    "default_timeout": 300
+  },
+  "files": [
+    "SKILL.md",
+    "metadata.json",
+    "scripts/mimo_video_analyze.py"
+  ]
+}

@@ -1,0 +1,17 @@
+display-name-zh: MiniMax H3 技能中心
+version: 1.0.0
+tag-en: "Hub"
+tag-cn: "入口"
+complete-tags-en:
+  - "Hub / Navigation"
+  - "Video Generation"
+complete-tags-cn:
+  - "入口 / 导航"
+  - "视频生成"
+summary-en: "Entry point to all MiniMax H3 video generation skills. Discover the right skill by your creative goal."
+summary-cn: "MiniMax H3 全部视频生成技能的统一入口。根据你的创作目标，快速找到最合适的技能。"
+desc-en: "The central hub for all MiniMax H3 skills. Instead of browsing every skill, start with your creative intent — commercial ads, animation, education, music videos, creative experiments, or prompt engineering — and navigate to the right tool with progressively revealed details."
+desc-cn: "MiniMax H3 全部技能的中央入口。无需逐个浏览所有技能，从你的创作意图出发——商业广告、动画叙事、知识科普、音乐MV、创意实验或提示词工程——逐步披露细节，找到最合适的工具。"
+author-en: "MiniMax Hub"
+author-cn: "MiniMax Hub"
+source: official

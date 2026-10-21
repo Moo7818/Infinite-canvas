@@ -1,0 +1,17 @@
+display-name-zh: H3 提示词编写
+version: 1.0.0
+tag-en: "Prompt Engineering"
+tag-cn: "提示词工程"
+complete-tags-en:
+  - "Prompt Engineering / Planning"
+  - "Video Generation / Planning"
+complete-tags-cn:
+  - "提示词工程 / 计划制定"
+  - "视频生成 / 计划制定"
+summary-en: "Write structured MiniMax H3 prompts for all five modes (T2VA, I2VA, FL2VA, L2VA, Ref2VA) with modular, on-demand rule references."
+summary-cn: "为 MiniMax H3 五种生成模式（T2VA、I2VA、FL2VA、L2VA、Ref2VA）编写结构化视频扩写提示词，规则参考按模块按需加载。"
+desc-en: "Turn open, scattered multimodal requests into structured H3 prompts: identify the generation mode, assemble the fixed instruction template and three core fields for base modes, or organize the six-section full-reference format with consistent reference labels. All rules ship as small English and Chinese modules under references/en/ and references/cn/, loaded on demand by mode and content (structure, camera, dialogue, cases, reference labels, retention analysis, detailed description, complete example)."
+desc-cn: "把开放、零散的多模态生成需求整理为 H3 可执行的结构化提示词：先判定生成模式，基础模式组装固定 instruction 模板与三个主体字段，全能参考模式按六段格式组织并保持引用标签一致。全部规则以小型模块形式提供英文版（references/en/）与中文版（references/cn/），按模式与内容按需加载（结构、运镜、台词、案例、引用标签、保留分析、详细描述、完整示例）。"
+author-en: "MiniMax Hub"
+author-cn: "MiniMax Hub"
+source: official

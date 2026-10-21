@@ -1,2 +1,3 @@
 node_modules/
-workspace/
+# 跟踪 workspace（站点工作空间），仅排除瞬态上传附件
+workspace/site/.attachments/

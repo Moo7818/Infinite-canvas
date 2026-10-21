@@ -7,12 +7,13 @@ data/
 *.log
 *.tsbuildinfo
 opencode-runtime/node_modules/
-opencode-runtime/workspace/
+# 跟踪 opencode 站点工作空间（AGENTS.md 等），但排除用户上传的瞬态附件
+opencode-runtime/workspace/site/.attachments/
 .DS_Store
 .idea
 
 **/dist
-infinite-canvas/web/public/plugins
+# 插件构建产物随仓库分发（clone 后免重建即可加载），故不再忽略 web/public/plugins
 infinite-canvas/plugins/canvas/*/dist
 infinite-canvas/plugins/canvas/*/node_modules
 # root docs build artifacts
