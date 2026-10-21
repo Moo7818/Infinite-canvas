@@ -14,3 +14,8 @@
 - 只有用户明确要求使用“Codex 内置生图”“ImageGen 技能”或意思明确相同的能力时，才使用 Codex 自带的 `imagegen`；不要因为用户只说“生成图片”就自行改用内置生图。内置生图完成后，其结果会由 Canvas Agent 自动展示到对话并插入当前画布，无需再创建空节点或重复生成。
 - 只有用户明确说要在生图/视频工作台生成时，才使用 `workbench_image_*`、`workbench_video_*`。生成任务提交后应说明已经在画布或工作台开始生成，不要在实际没有结果时声称“已生成”。
 - 需要生成内容时直接调用对应生成工具，不要绑定特定业务场景，不要模拟鼠标点击，不要要求用户手动复制 JSON。
+- 角色/场景/道具是自研插件节点，用 `canvas_create_character_node`、`canvas_create_scene_node`、`canvas_create_prop_node` 建带字段的节点；建好或补齐字段后用 `canvas_run_generation`（传该节点 `nodeId`）触发节点自身生成——角色出「半身近景+三视图设定图」、场景出 16:9 场景图、道具出道具图，结果写回该节点版本；进度用 `generation_get_status` 传 `nodeIds` 查询，节点 `generating` 期间为 running、成功后为 succeeded。
+  - 角色 `character:role`：`name`/`age`/`traits`/`style` 描述人物，参考图 `faceText`+`faceImages`（容貌，≤3）、`outfitText`+`outfitImages`（服装，≤2）、`extraText`+`extraImages`（≤3）。容貌参考优先用用户提供的真人/角色图。
+  - 场景 `scene:view`：`name`/`time`/`style`/`camera` 设定环境，参考图 `envText`+`envImages`（环境，≤3）、`lightText`+`lightImages`（光影，≤2）、`extraText`+`extraImages`（≤3 中取 ≤2）、`styleImage`（风格图，≤1）。
+  - 道具 `prop:item`：`name`/`category`/`style`/`view` 设定道具，参考图 `materialText`+`materialImages`（材质，≤2）、`detailText`+`detailImages`（细节，≤3）、`extraText`+`extraImages`（≤2）、`styleImage`（≤1）。
+  - 这三类节点的参考图字段同样只接受 `data:image/...` dataURL、`http(s)` URL 或 `attachment:<附件ID>`，超限自动压缩、远程拉取失败会中断；参考图直接写进字段，不需要先建独立图片节点。
