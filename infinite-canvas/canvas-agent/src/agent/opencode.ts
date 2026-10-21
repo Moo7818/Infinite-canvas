@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -220,7 +219,7 @@ async function runOpencodeTurnNow(prompt: string, lifecycleEmit: AgentEmit, atta
     let files: string[] = [];
     try {
         options.onStart?.();
-        files = await writeAttachmentFiles(attachments);
+        files = await writeAttachmentFiles(attachments, options.cwd);
         const emit = options.appEmit || lifecycleEmit;
         const opencode = await getOpencodeClient(emit);
         const cwd = options.cwd || process.cwd();
@@ -269,7 +268,6 @@ async function runOpencodeTurnNow(prompt: string, lifecycleEmit: AgentEmit, atta
         lifecycleEmit("agent_error", { message: errorMessage(error) });
     } finally {
         options.onFinish?.();
-        await Promise.all(files.map((file) => fs.unlink(file).catch(() => undefined)));
     }
 }
 

@@ -9,8 +9,10 @@ import { compactCanvasState, compactNode, isToolName, nextCanvasX, parseToolInpu
 import type { CanvasSnapshot } from "./types.js";
 
 type PendingRequest = { clientId: string; resolve: (value: unknown) => void; reject: (error: Error) => void };
-type TurnAttachment = { clientId: string; id: string; name: string; type: string; size: number; width: number; height: number; dataUrl: string };
+type TurnAttachment = { clientId: string; id: string; name: string; type: string; size: number; width: number; height: number; dataUrl: string; createdAt: number };
 type ReplayEvent = { type: string; payload: Record<string, unknown> };
+/** 单个标签页最多保留的图片附件数，超出按上传时间淘汰，避免长期占用内存。 */
+const MAX_ATTACHMENTS_PER_CLIENT = 24;
 export type CodexState = { busy: boolean; threadId: string; turnId: string };
 export type McpStartupState = "starting" | "ready" | "failed" | "cancelled";
 export type ConversationState = {
@@ -336,10 +338,10 @@ export class CanvasSession {
         logger.debug("Canvas client released from turn", { clientId });
     }
 
-    /** 保存当前 turn 可用的图片附件并返回安全引用。 */
+    /** 保存图片附件并返回安全引用；同一标签页的附件跨 turn 保留，便于后续轮次继续引用。 */
     setTurnAttachments(clientId: string, attachments: AgentAttachment[]) {
-        this.turnAttachments.clear();
-        return attachments.flatMap((item, index) => {
+        const currentIds = new Set<string>();
+        const result = attachments.flatMap((item, index) => {
             if (!item.dataUrl?.startsWith("data:image/")) return [];
             const id = item.id?.trim() || `attachment-${crypto.randomUUID()}`;
             const attachment: TurnAttachment = {
@@ -351,24 +353,47 @@ export class CanvasSession {
                 width: positiveNumber(item.width, 1024),
                 height: positiveNumber(item.height, 1024),
                 dataUrl: item.dataUrl,
+                createdAt: Date.now(),
             };
             this.turnAttachments.set(id, attachment);
+            currentIds.add(id);
             return [{ id, name: attachment.name, type: attachment.type, size: attachment.size, width: attachment.width, height: attachment.height }];
         });
+        this.trimAttachments(clientId, currentIds);
+        return result;
     }
 
-    /** 清理指定网页或全部 turn 附件。 */
+    /** 淘汰超出上限的旧附件，本轮刚上传的始终保留。 */
+    private trimAttachments(clientId: string, keep: Set<string>) {
+        const entries = [...this.turnAttachments.entries()].filter(([, item]) => item.clientId === clientId).sort((left, right) => left[1].createdAt - right[1].createdAt);
+        let total = entries.length;
+        for (const [id] of entries) {
+            if (total <= MAX_ATTACHMENTS_PER_CLIENT) return;
+            if (keep.has(id)) continue;
+            this.turnAttachments.delete(id);
+            total--;
+        }
+    }
+
+    /** 列出指定网页最近上传、仍可用的图片附件。 */
+    listAttachments(clientId: string) {
+        return [...this.turnAttachments.values()]
+            .filter((item) => item.clientId === clientId)
+            .map(({ id, name, type, size, width, height }) => ({ id, name, type, size, width, height }));
+    }
+
+    /** 清理指定网页或全部图片附件。 */
     clearTurnAttachments(clientId?: string) {
         this.turnAttachments.forEach((item, id) => {
             if (!clientId || item.clientId === clientId) this.turnAttachments.delete(id);
         });
     }
 
-    /** 获取属于指定网页 turn 的图片附件。 */
+    /** 获取指定网页上传的图片附件（同一标签页的附件跨 turn 有效）。 */
     getTurnAttachment(clientId: string, attachmentId: string) {
         const attachment = this.turnAttachments.get(attachmentId);
-        if (!attachment) throw new Error(`找不到本轮图片附件：${attachmentId}`);
-        if (attachment.clientId !== clientId) throw new Error("图片附件不属于当前 turn 的发起标签页");
+        if (!attachment) throw new Error(`找不到图片附件：${attachmentId}（每个标签页只保留最近 ${MAX_ATTACHMENTS_PER_CLIENT} 张，请重新上传）`);
+        if (attachment.clientId !== clientId) throw new Error("图片附件不属于当前发起标签页，请在原页面继续操作");
         return attachment;
     }
 
@@ -448,6 +473,10 @@ export class CanvasSession {
         }
         const readTool = ["canvas_get_state", "canvas_get_selection", "canvas_export_snapshot"].includes(name);
         if (readTool && (!this.clients.size || !this.canvasState)) throw new Error("当前没有已连接画布");
+        if (name === "canvas_list_attachments") {
+            if (!this.clients.size) throw new Error("当前没有已连接网页");
+            return { attachments: this.listAttachments(this.targetClientId) };
+        }
         if (name === "canvas_get_state" || name === "canvas_export_snapshot") return compactCanvasState(this.canvasState);
         if (name === "canvas_get_selection") {
             const ids = new Set(this.canvasState?.selectedNodeIds || []);

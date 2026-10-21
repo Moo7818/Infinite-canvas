@@ -531,6 +531,64 @@ test("切换活动线程会清除上一线程的实时快照", (t) => {
 });
 
 /** 创建用于测试的画布 SSE 连接。 */
+test("图片附件跨 turn 保留并可列出", () => {
+    const session = new CanvasSession();
+    session.setTurnAttachments("first", [{ id: "attachment-1", name: "商品.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }]);
+    session.setTurnAttachments("first", [{ id: "attachment-2", name: "场景.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }]);
+    assert.equal(session.getTurnAttachment("first", "attachment-1").name, "商品.png");
+    assert.deepEqual(session.listAttachments("first").map((item) => item.id), ["attachment-1", "attachment-2"]);
+    assert.deepEqual(session.listAttachments("second"), []);
+});
+
+test("图片附件超过上限时淘汰最早上传的", () => {
+    const session = new CanvasSession();
+    for (let index = 1; index <= 30; index++) {
+        session.setTurnAttachments("first", [{ id: `attachment-${index}`, name: `图 ${index}.png`, type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }]);
+    }
+    const ids = session.listAttachments("first").map((item) => item.id);
+    assert.equal(ids.length, 24);
+    assert.equal(ids[0], "attachment-7");
+    assert.equal(ids.at(-1), "attachment-30");
+    assert.throws(() => session.getTurnAttachment("first", "attachment-1"), /找不到图片附件/);
+});
+
+test("canvas_list_attachments 返回当前标签页可用附件", async (t) => {
+    const session = new CanvasSession();
+    const first = connect(session, "first");
+    t.after(() => first.close());
+    session.setTurnAttachments("first", [{ id: "attachment-1", name: "商品.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }]);
+
+    assert.deepEqual(await session.callTool("canvas_list_attachments", {}), {
+        attachments: [{ id: "attachment-1", name: "商品.png", type: "image/png", size: 0, width: 1024, height: 1024 }],
+    });
+});
+
+test("metadata 传 JSON 字符串时按对象解析", async (t) => {
+    const session = new CanvasSession();
+    const first = connect(session, "first");
+    t.after(() => first.close());
+    session.updateState(snapshot("canvas-first"), "first");
+
+    const result = session.callTool("canvas_apply_ops", { ops: [{ type: "add_node", nodeType: "text", metadata: '{"color":"red"}' }] });
+    const call = first.event("tool_call");
+    const ops = field(field(call, "input"), "ops") as Array<Record<string, unknown>>;
+    assert.deepEqual(ops[0].metadata, { color: "red" });
+    session.resolveResult("first", { requestId: String(field(call, "requestId")), result: { ok: true } });
+    await result;
+});
+
+test("图片字段拒绝本地路径、blob 和节点 ID", async (t) => {
+    const session = new CanvasSession();
+    const first = connect(session, "first");
+    t.after(() => first.close());
+    session.updateState(snapshot("canvas-first"), "first");
+
+    for (const faceImages of [["file:///C:/Windows/Temp/a.jpg"], ["blob:http://localhost/a"], ["/face_ref.jpg"], ["image-01ecece6"]]) {
+        await assert.rejects(session.callTool("canvas_create_character_node", { name: "林晚棠", faceImages }), /dataURL 或 http/);
+    }
+    assert.equal(first.event("tool_call"), undefined);
+});
+
 function connect(session: CanvasSession, clientId: string, activeThreadId = "") {
     const response = new FakeSseResponse();
     session.openEvents(new URL(`http://127.0.0.1/events?clientId=${clientId}`), response as unknown as ServerResponse, activeThreadId);

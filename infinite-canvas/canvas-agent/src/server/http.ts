@@ -321,6 +321,7 @@ export function startHttpServer() {
         try {
             let turnId = "";
             const attachmentRefs = session.setTurnAttachments(clientId, attachments);
+            const historyRefs = session.listAttachments(clientId).filter((item) => !attachmentRefs.some((current) => current.id === item.id));
             session.emitThread("chat_message", threadId, {
                 sourceClientId: clientId,
                 message: { id: `${threadId}:pending:synthetic:user`, itemId: "synthetic:user", clientMessageId: messageId, threadId, turnId: "", role: "user", text: messageText, ...messageMetadata },
@@ -340,7 +341,7 @@ export function startHttpServer() {
                     ...(sourceClientId ? { sourceClientId } : {}),
                 });
             };
-            void runTurn(withAttachmentContext(prompt, attachmentRefs), lifecycleEmit, attachments, {
+            void runTurn(withAttachmentContext(prompt, attachmentRefs, historyRefs), lifecycleEmit, attachments, {
                 threadId,
                 cwd: workspace.workspacePath,
                 permissionMode: permissionMode(req.body?.permissionMode),
@@ -383,7 +384,6 @@ export function startHttpServer() {
                 onFinish: () => {
                     logger.info("Codex turn finished", { threadId, turnId });
                     if (!turnId) void messageMetadataStore.remove(messageId, threadId).catch((error) => logger.warn("Failed to remove unbound message metadata", { clientMessageId: messageId, error }));
-                    session.clearTurnAttachments(clientId);
                     if (clientId) session.releaseClient(clientId);
                     session.setCodexState({ busy: false, threadId, turnId });
                     session.finishConversationRun(threadId);
@@ -545,9 +545,13 @@ function validToken(req: Request, url: URL, token: string) {
     return url.searchParams.get("token") === token || header === token || (Array.isArray(header) && header.includes(token));
 }
 
-/** 向 Agent 提示词追加本轮图片附件引用说明。 */
-function withAttachmentContext(prompt: string, attachments: Array<{ id: string; name: string }>) {
-    if (!attachments.length) return prompt;
-    const list = attachments.map((item, index) => `${index + 1}. attachmentId=${item.id}, name=${JSON.stringify(item.name)}`).join("\n");
-    return `${prompt}\n\n本轮可用图片附件（顺序与图片输入一致）：\n${list}\n需要把附件放入画布或作为生成参考图时，先调用 canvas_create_attachment_nodes，再使用返回的画布节点 ID 创建生成流程。`;
+/** 向 Agent 提示词追加图片附件引用说明（本轮上传 + 此前仍可复用的）。 */
+function withAttachmentContext(prompt: string, current: Array<{ id: string; name: string }>, history: Array<{ id: string; name: string }> = []) {
+    if (!current.length && !history.length) return prompt;
+    const format = (items: Array<{ id: string; name: string }>) => items.map((item, index) => `${index + 1}. attachmentId=${item.id}, name=${JSON.stringify(item.name)}`).join("\n");
+    const sections = [
+        current.length ? `本轮可用图片附件（顺序与图片输入一致）：\n${format(current)}` : "",
+        history.length ? `此前上传、仍可复用的图片附件：\n${format(history)}` : "",
+    ].filter(Boolean);
+    return `${prompt}\n\n${sections.join("\n\n")}\n图片使用规则：需要把图片放进画布或作为参考图时，先调用 canvas_create_attachment_nodes（attachmentId 取上面清单），再用返回的节点 ID 交给 canvas_create_generation_flow.referenceNodeIds。不要使用 %TEMP%、file://、blob: 或相对路径，也不要把节点 ID 当图片地址（faceImages 等字段只接受 dataURL 或 http(s) URL）；不确定旧附件 ID 时调用 canvas_list_attachments。`;
 }

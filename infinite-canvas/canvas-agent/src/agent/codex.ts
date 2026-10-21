@@ -191,7 +191,7 @@ async function runCodexTurnNow(prompt: string, lifecycleEmit: AgentEmit, attachm
     let files: string[] = [];
     try {
         options.onStart?.();
-        files = await writeAttachmentFiles(attachments);
+        files = await writeAttachmentFiles(attachments, options.cwd);
         const app = await getCodexApp(options.appEmit || lifecycleEmit);
         let threadId = await ensureCodexThread(app, options, lifecycleEmit);
         options.onThread?.(threadId);
@@ -210,7 +210,6 @@ async function runCodexTurnNow(prompt: string, lifecycleEmit: AgentEmit, attachm
         if (!(error instanceof CodexReportedError)) lifecycleEmit("agent_error", { message: errorMessage(error) });
     } finally {
         options.onFinish?.();
-        await Promise.all(files.map((file) => fs.unlink(file).catch(() => undefined)));
     }
 }
 
@@ -486,23 +485,30 @@ function samePath(left: string, right: string) {
     return normalize(left) === normalize(right);
 }
 
-/** 将图片附件写入临时文件供 Agent 读取（codex 与 opencode 共用）。 */
-export async function writeAttachmentFiles(attachments: AgentAttachment[]) {
-    return await Promise.all(attachments.filter((item) => item.dataUrl?.startsWith("data:image/")).map(writeAttachmentFile));
+/** 将图片附件写入工作空间 .attachments 目录，文件名使用附件 ID，跨 turn 仍可读取。 */
+export async function writeAttachmentFiles(attachments: AgentAttachment[], cwd?: string) {
+    const dir = path.join(cwd || os.tmpdir(), ".attachments");
+    await fs.mkdir(dir, { recursive: true });
+    return await Promise.all(attachments.filter((item) => item.dataUrl?.startsWith("data:image/")).map((item) => writeAttachmentFile(item, dir)));
 }
 
-/** 将单个 Data URL 图片附件写入临时文件。 */
-async function writeAttachmentFile(item: AgentAttachment) {
+/** 将单个 Data URL 图片附件写入工作空间附件目录。 */
+async function writeAttachmentFile(item: AgentAttachment, dir: string) {
     const [, meta = "", data = ""] = item.dataUrl?.match(/^data:([^;]+);base64,(.+)$/) || [];
     if (!data) throw new Error(`图片附件无效：${item.name || "未命名图片"}`);
-    const file = path.join(os.tmpdir(), `infinite-canvas-${Date.now()}-${Math.random().toString(16).slice(2)}.${imageExt(meta || item.type)}`);
+    const name = (item.id || Date.now().toString(36)).replace(/[^\w.-]/g, "_");
+    const file = path.join(dir, `${name}.${imageExt(meta || item.type)}`);
     await fs.writeFile(file, Buffer.from(data, "base64"));
     return file;
 }
 
-/** 根据图片 MIME 类型返回临时文件扩展名。 */
+/** 根据图片 MIME 类型返回文件扩展名。 */
 function imageExt(type = "") {
     if (type.includes("png")) return "png";
     if (type.includes("webp")) return "webp";
+    if (type.includes("gif")) return "gif";
+    if (type.includes("avif")) return "avif";
+    if (type.includes("bmp")) return "bmp";
+    if (type.includes("svg")) return "svg";
     return "jpg";
 }

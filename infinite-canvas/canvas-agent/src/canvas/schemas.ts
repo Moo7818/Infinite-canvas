@@ -1,6 +1,16 @@
 import { z } from "zod";
 
-const recordSchema = z.record(z.unknown());
+/** metadata 等自由对象字段：同时接受对象与 JSON 字符串（模型常把对象序列化成字符串传入）。 */
+const recordSchema = z.preprocess((value) => {
+    if (typeof value !== "string") return value;
+    const text = value.trim();
+    if (!text.startsWith("{")) return value;
+    try {
+        return JSON.parse(text);
+    } catch {
+        return value;
+    }
+}, z.record(z.unknown()));
 const positionSchema = z.object({ x: z.number(), y: z.number() });
 const viewportSchema = z.object({ x: z.number(), y: z.number(), k: z.number() });
 const nodeTypeSchema = z.enum(["image", "text", "config", "video", "audio"]);
@@ -16,6 +26,7 @@ export const toolNames = [
     "canvas_apply_ops",
     "canvas_create_node",
     "canvas_create_attachment_nodes",
+    "canvas_list_attachments",
     "canvas_create_text_node",
     "canvas_create_text_nodes",
     "canvas_create_config_node",
@@ -104,7 +115,12 @@ const pluginNodeBase = {
     height: z.number().optional(),
 };
 
-const referenceImages = z.array(z.string());
+/** 图片字段只接受 dataURL 或 http(s) URL，显式拒绝本地路径／临时文件／节点 ID。 */
+const imageRefSchema = z.string().refine((value) => /^data:image\//i.test(value) || /^https?:\/\//i.test(value), {
+    message: "图片必须是 data:image/... dataURL 或 http(s) URL；file://、blob:、相对路径和画布节点 ID 都不能直接作为图片地址。需要把用户上传的图片放进画布时，先调用 canvas_create_attachment_nodes 生成图片节点，再用返回的节点 ID 作为生成参考。",
+});
+
+const referenceImages = z.array(imageRefSchema);
 
 const characterNodeSchema = z.object({
     ...pluginNodeBase,
@@ -125,7 +141,7 @@ const sceneNodeSchema = z.object({
     name: z.string().optional(),
     time: z.string().optional(),
     style: z.string().optional(),
-    styleImage: z.string().optional(),
+    styleImage: imageRefSchema.optional(),
     envText: z.string().optional(),
     envImages: referenceImages.optional(),
     lightText: z.string().optional(),
@@ -140,7 +156,7 @@ const propNodeSchema = z.object({
     name: z.string().optional(),
     category: z.string().optional(),
     style: z.string().optional(),
-    styleImage: z.string().optional(),
+    styleImage: imageRefSchema.optional(),
     materialText: z.string().optional(),
     materialImages: referenceImages.optional(),
     detailText: z.string().optional(),
@@ -179,6 +195,7 @@ export const toolInputSchemas = {
     canvas_apply_ops: z.object({ ops: z.array(canvasOpSchema) }),
     canvas_create_node: z.object({ nodeType: nodeTypeSchema, title: z.string().optional(), x: z.number().optional(), y: z.number().optional(), width: z.number().optional(), height: z.number().optional(), metadata: recordSchema.optional() }),
     canvas_create_attachment_nodes: z.object({ attachmentIds: z.array(z.string()).min(1), x: z.number().optional(), y: z.number().optional(), gap: z.number().optional(), direction: z.enum(["row", "column"]).optional() }),
+    canvas_list_attachments: z.object({}).passthrough(),
     canvas_create_text_node: z.object({ text: z.string().optional(), x: z.number().optional(), y: z.number().optional(), title: z.string().optional(), width: z.number().optional(), height: z.number().optional() }),
     canvas_create_text_nodes: z.object({ items: z.array(textNodeSchema).min(1), x: z.number().optional(), y: z.number().optional(), gap: z.number().optional(), direction: z.enum(["row", "column"]).optional() }),
     canvas_create_config_node: z.object({ prompt: z.string().optional(), mode: generationModeSchema.optional(), title: z.string().optional(), x: z.number().optional(), y: z.number().optional(), width: z.number().optional(), height: z.number().optional(), autoRun: z.boolean().optional() }).merge(generationOptionsSchema),
@@ -221,7 +238,8 @@ export const toolDescriptions: Record<ToolName, string> = {
     canvas_export_snapshot: "导出当前画布快照，用于理解布局。",
     canvas_apply_ops: "批量操作当前网页画布。ops 支持 add_node、update_node、delete_node、delete_connections、connect_nodes、set_viewport、select_nodes、run_generation。",
     canvas_create_node: "创建任意类型节点：text、image、config、video、audio。适合创建占位图、媒体占位、配置节点或自定义 metadata 节点。",
-    canvas_create_attachment_nodes: "把当前对话中用户上传的图片附件创建成真实画布图片节点。attachmentIds 使用本轮附件清单中的 ID；返回的节点 ID 可传给 canvas_create_generation_flow.referenceNodeIds 作为生成参考图。",
+    canvas_create_attachment_nodes: "把用户上传的图片附件创建成真实画布图片节点。attachmentIds 取附件清单中的 ID（本轮或此前上传且仍在保留期内的附件都可）；返回的节点 ID 可传给 canvas_create_generation_flow.referenceNodeIds 作为生成参考图。",
+    canvas_list_attachments: "列出当前标签页最近上传、仍可使用的图片附件（attachmentId、文件名、尺寸）。不确定旧附件 ID 时先调用本工具；创建图片节点仍用 canvas_create_attachment_nodes。",
     canvas_create_text_node: "在当前画布创建单个文本节点。",
     canvas_create_text_nodes: "批量创建文本节点，适合生成标题、段落、脚本、说明等内容块。",
     canvas_create_config_node: "创建生成配置节点，可指定 text/image/video/audio 模式和生成参数，可选择立即触发生成。",
