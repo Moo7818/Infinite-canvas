@@ -27,6 +27,7 @@
     "@opencode-ai/sdk": "^1.18.30",
     "express": "^5.1.0",
     "gray-matter": "^4.0.3",
+    "opencode-ai": "1.19.3",
     "strip-ansi": "7.2.0",
     "winston": "^3.19.0",
     "yaml": "^2.9.0",

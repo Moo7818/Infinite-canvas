@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createRequire } from "node:module";
 import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
 
 import { ensureSiteWorkspace, loadConfig } from "../config.js";
@@ -6,6 +7,17 @@ import { logger } from "../utils/logger.js";
 import { errorMessage, field, type JsonRecord } from "../utils/value.js";
 import { canvasAgentMcpCommand } from "./codex-client.js";
 import type { AgentEmit } from "./types.js";
+
+const require = createRequire(import.meta.url);
+
+/** 本地固定版 opencode CLI 的 bin 目录（优先于全局 PATH，版本与共享 opencode.db 兼容）。 */
+function localOpencodeBinDir() {
+    try {
+        return path.join(path.dirname(require.resolve("opencode-ai/package.json")), "bin");
+    } catch {
+        return "";
+    }
+}
 
 /** opencode 服务固定监听端口，避免与 Canvas Agent 默认端口冲突。 */
 export const OPENCODE_PORT = 17372;
@@ -30,8 +42,11 @@ export async function getOpencodeClient(emit: AgentEmit): Promise<OpencodeClient
 }
 
 async function startOpencode(emit: AgentEmit): Promise<OpencodeClient> {
+    // 解析顺序：本地固定版 bin > 已配置 PATH > npm 全局兜底。
+    const localBin = localOpencodeBinDir();
+    if (localBin) process.env.PATH = `${localBin}${path.delimiter}${process.env.PATH || ""}`;
     if (process.platform === "win32") {
-        // 兜底：用户 PATH 没有 opencode 时补上 npm 全局目录；显式前置的优先级不受影响。
+        // 兜底：用户 PATH 没有 opencode 时补上 npm 全局目录。
         const npmDir = path.join(process.env.APPDATA || "", "npm");
         if (npmDir !== path.join("", "npm") && !`${path.delimiter}${process.env.PATH || ""}${path.delimiter}`.toLowerCase().includes(`${path.delimiter}${npmDir.toLowerCase()}${path.delimiter}`)) {
             process.env.PATH = `${process.env.PATH || ""}${path.delimiter}${npmDir}`;
