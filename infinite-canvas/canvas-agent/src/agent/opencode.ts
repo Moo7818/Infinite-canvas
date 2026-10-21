@@ -118,7 +118,7 @@ function unwrapResponse(value: unknown): JsonRecord {
     return data && typeof data === "object" && !Array.isArray(data) ? (data as JsonRecord) : outer;
 }
 
-/** 查询当前可用模型；id 编码为 providerID/modelID，turn 时解码回 opencode。仅暴露 opencode 官方免费模型。 */
+/** 查询当前可用模型；id 编码为 providerID/modelID，turn 时解码回 opencode。跟随 opencode 已配置的 provider 与模型，不再写死只取免费模型。 */
 export async function listOpencodeModels(emit: AgentEmit) {
     const opencode = await getOpencodeClient(emit);
     const payload = unwrapResponse(await opencode.config.providers());
@@ -127,10 +127,10 @@ export async function listOpencodeModels(emit: AgentEmit) {
     const data = providers.flatMap((value: unknown) => {
         const provider = (value || {}) as JsonRecord;
         const providerId = String(field(provider, "id") || "");
-        if (providerId !== "opencode") return [];
+        if (!providerId) return [];
         const defaultModel = String(field(defaults, providerId) || "");
         return Object.entries((field(provider, "models") || {}) as JsonRecord)
-            .filter(([modelId]) => modelId !== "directory" && modelId.endsWith("-free"))
+            .filter(([modelId]) => modelId !== "directory")
             .map(([modelId, model]): CodexModel => ({
                 id: `${providerId}/${modelId}`,
                 model: modelId,
