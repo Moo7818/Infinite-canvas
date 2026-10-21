@@ -4,7 +4,7 @@
 > 本文为中英对照的只读清单；参数细节以 schemas.ts 为准。协议入口：本机 `127.0.0.1:17371`，MCP 启动命令 `npx -y @basketikun/canvas-agent@latest mcp`。本工具集对任意 MCP 客户端开放（协议无关），注册示例见 `.opencode/opencode.json`（其他客户端同理）。
 > This is a read-only bilingual reference. Parameter details follow `schemas.ts`. Local endpoint: `127.0.0.1:17371`; MCP command: `npx -y @basketikun/canvas-agent@latest mcp`.
 
-共 34 个工具 / 34 tools in total.
+共 39 个工具 / 39 tools in total.
 
 ## 1. 站点导航 Site navigation（1）
 
@@ -13,7 +13,7 @@
 - EN: Navigate to a site page. Allowed paths: `/`, `/canvas`, `/canvas/:id`, `/image`, `/video`, `/prompts`, `/assets`, `/config`. Open the canvas first if the agent is not on a canvas page.
 - 入参 / Params: `path: string`
 
-## 2. 画布读取 Canvas reading（4）
+## 2. 画布读取 Canvas reading（5）
 
 ### `canvas_get_state`
 - 中文：读取当前网页画布的节点、连线、选区和视口。
@@ -35,7 +35,12 @@
 - EN: List all canvases (title, created/updated time, node/connection counts only), with keyword search and pagination; pair returned ids with `site_navigate` to open one.
 - 入参 / Params: `keyword?`, `page?`, `pageSize?`
 
-## 3. 画布写操作 Canvas writing（21）
+### `canvas_list_node_types`
+- 中文：列出当前网页已注册的画布节点类型（类型 ID、标题、所属插件、默认尺寸、创建菜单可见性），可用 `pluginId` 过滤。插件节点类型不在 `canvas_create_node` 的枚举内，创建前先用本工具确认。
+- EN: List the canvas node types registered in the current web page (type id, title, owning plugin, default size, create-menu visibility), filterable by `pluginId`. Plugin node types are outside `canvas_create_node`'s enum; confirm ids here first.
+- 入参 / Params: `pluginId?`
+
+## 3. 画布写操作 Canvas writing（26）
 
 ### `canvas_apply_ops`
 - 中文：批量操作当前画布。ops 支持 `add_node`、`update_node`、`delete_node`、`delete_connections`、`connect_nodes`、`set_viewport`、`select_nodes`、`run_generation`。
@@ -76,6 +81,31 @@
 - 中文：创建通用生成流程：提示词节点、配置节点、参考节点连线，可用于文案/生图/视频/音频。
 - EN: Create a generic generation flow: prompt node, config node, and reference connections — for text, image, video, or audio.
 - 入参 / Params: `prompt`(必填/required), `title?`, `x?`, `y?`, `mode?`, `autoRun?`, `referenceNodeIds[]?`, 同上生成参数 / same generation options
+
+### `canvas_create_character_node`
+- 中文：创建角色节点（`character:role`）。`name`、`age`、`traits`、`style` 描述角色；`faceText/faceImages`（≤3）、`outfitText/outfitImages`（≤2）、`extraText/extraImages`（≤3）提供参考，图片传地址或 dataURL。
+- EN: Create a character node (`character:role`). `name`, `age`, `traits`, `style` describe the role; `faceText/faceImages` (≤3), `outfitText/outfitImages` (≤2), `extraText/extraImages` (≤3) hold references; images take URLs or dataURLs.
+- 入参 / Params: `title?`, `x?`, `y?`, `width?`, `height?`, `name?`, `age?`, `traits?`, `style?`, `faceText?`, `faceImages[]?`, `outfitText?`, `outfitImages[]?`, `extraText?`, `extraImages[]?`
+
+### `canvas_create_scene_node`
+- 中文：创建场景节点（`scene:view`）。`name`、`time`、`style`、`camera` 设定场景；`envText/envImages`（≤3）、`lightText/lightImages`（≤2）、`extraText/extraImages`（≤2）提供参考，`styleImage` 传风格图（≤1）。
+- EN: Create a scene node (`scene:view`). `name`, `time`, `style`, `camera` set the scene; `envText/envImages` (≤3), `lightText/lightImages` (≤2), `extraText/extraImages` (≤2) hold references; `styleImage` takes one style image.
+- 入参 / Params: `title?`, `x?`, `y?`, `width?`, `height?`, `name?`, `time?`, `style?`, `styleImage?`, `envText?`, `envImages[]?`, `lightText?`, `lightImages[]?`, `camera?`, `extraText?`, `extraImages[]?`
+
+### `canvas_create_prop_node`
+- 中文：创建道具节点（`prop:item`）。`name`、`category`、`style`、`view` 设定道具；`materialText/materialImages`（≤2）、`detailText/detailImages`（≤3）、`extraText/extraImages`（≤2）提供参考，`styleImage` 传风格图（≤1）。
+- EN: Create a prop node (`prop:item`). `name`, `category`, `style`, `view` set the prop; `materialText/materialImages` (≤2), `detailText/detailImages` (≤3), `extraText/extraImages` (≤2) hold references; `styleImage` takes one style image.
+- 入参 / Params: `title?`, `x?`, `y?`, `width?`, `height?`, `name?`, `category?`, `style?`, `styleImage?`, `materialText?`, `materialImages[]?`, `detailText?`, `detailImages[]?`, `view?`, `extraText?`, `extraImages[]?`
+
+### `canvas_create_grid_node`
+- 中文：创建宫格节点（`grid:board`，2×2 四宫格）。`castIds[]` 传角色节点 ID（有序），`castNames[]` 保存角色名快照，`spaceId/spaceName` 关联场景节点，`doc` 填整体说明。
+- EN: Create a grid node (`grid:board`, 2×2). `castIds[]` lists ordered character node ids, `castNames[]` stores a name snapshot, `spaceId/spaceName` link a scene node, `doc` holds the brief.
+- 入参 / Params: `title?`, `x?`, `y?`, `width?`, `height?`, `name?`, `castIds[]?`, `castNames[]?`, `spaceId?`, `spaceName?`, `doc?`
+
+### `canvas_create_film_node`
+- 中文：创建影片节点（`video:film`）。`name`、`model`、`ratio`（如 16:9）、`seconds`（1–15）、`prompt`、`refs[]` 参考图；生成仍在节点面板内触发。
+- EN: Create a film node (`video:film`). `name`, `model`, `ratio` (e.g. 16:9), `seconds` (1–15), `prompt`, and `refs[]` reference images; generation is still triggered from the node panel.
+- 入参 / Params: `title?`, `x?`, `y?`, `width?`, `height?`, `name?`, `model?`, `ratio?`, `seconds?`, `prompt?`, `refs[]?`
 
 ### `canvas_generate_text`
 - 中文：创建文本生成流程并立即触发生成。
@@ -145,8 +175,8 @@
 ## 4. 生成状态 Generation status（1）
 
 ### `generation_get_status`
-- 中文：查询当前活动网页的生成任务状态；默认返回画布与两个工作台的最近任务，可用 `scope` 过滤，`taskId` 查工作台任务，`nodeIds` 查画布节点。
-- EN: Query generation task status. Defaults to recent canvas and workbench tasks; filter with `scope`, query workbench tasks by `taskId`, canvas nodes by `nodeIds`.
+- 中文：查询当前活动网页的生成任务状态；默认返回画布与两个工作台的最近任务，可用 `scope` 过滤，`taskId` 查工作台任务，`nodeIds` 查画布节点。画布节点状态同时识别 `metadata.status` 和插件节点的 `metadata.generating` / `generateError`。
+- EN: Query generation task status. Defaults to recent canvas and workbench tasks; filter with `scope`, query workbench tasks by `taskId`, canvas nodes by `nodeIds`. Canvas node status reads both `metadata.status` and the plugin-node `metadata.generating` / `generateError` fields.
 - 入参 / Params: `scope?: all|canvas|image|video`, `taskId?`, `nodeIds[]?`, `limit?`
 
 ## 5. 工作台 Workbench（4）
@@ -190,8 +220,8 @@
 
 ## 已知边界 Known limitations
 
-- 中文：节点类型枚举锁死五核心（`schemas.ts:6`），**不能创建自定义插件节点**（如 `character:role`、`video:film`）；插件节点可被读取与按 id 更新，metadata 全量返回（仅 `content` 超 240 字截断）；`run_generation` 对插件节点会走宿主内置流程，不触发插件自身生成。
-- EN: The node-type enum is locked to the five core types (`schemas.ts:6`), so **custom plugin nodes cannot be created** (e.g. `character:role`, `video:film`). Plugin nodes can be read and updated by id; metadata is returned in full (only `content` is truncated at 240 chars). `run_generation` on a plugin node falls into the host's built-in flow and does not trigger the plugin's own generation.
+- 中文：节点类型枚举锁死五核心（`schemas.ts:6`），但已提供 5 个语义化工具创建插件节点（角色/场景/道具/宫格/影片）；`add_node` 对显式传入但未注册的 nodeType 直接报错（不再静默回退 Text）。插件节点可被读取与按 id 更新，metadata 全量返回（仅 `content` 超 240 字截断）；`run_generation` 对插件节点会走宿主内置流程，不触发插件自身生成（待单独排期）。
+- EN: The node-type enum is locked to the five core types (`schemas.ts:6`), but 5 semantic tools now create plugin nodes (character/scene/prop/grid/film). `add_node` rejects an explicitly provided unregistered nodeType instead of silently falling back to Text. Plugin nodes can be read and updated by id; metadata is returned in full (only `content` is truncated at 240 chars). `run_generation` on a plugin node falls into the host's built-in flow and does not trigger the plugin's own generation (deferred).
 - 中文：**项目级 CRUD 缺失**——没有新建/重命名/删除画布的工具；新建画布只能借助 `site_navigate("/canvas?mode=new")` 触发网页自动流程（默认标题"无限画布 N"）。
 - EN: **No project-level CRUD** — there is no tool to create/rename/delete a canvas. Creating relies on `site_navigate("/canvas?mode=new")`, which triggers the web app's auto-create flow (default title "Canvas N").
 - 中文：鉴权用 `canvas-agent.json` 的 `token`（查询参数或 `x-canvas-agent-token` 头）；网页侧边栏直连走 HTTP+SSE，属另一条链路（Codex 专属 turn 端点）。
