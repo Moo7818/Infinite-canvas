@@ -2,9 +2,11 @@
 
 ## Unreleased
 
++ [新增] Agent 图片字段支持 `attachment:<附件ID>` 直接作为节点参数写入并超限自动压缩：canvas-agent 把 `attachment:<id>` 展开为附件 dataURL（参考图不再需要先经 `canvas_create_attachment_nodes` 建独立图片节点，附件缺失或跨标签页会中断报错）；浏览器写入画布前对图片字段做超限处理——远程 `http(s)` 图先拉取（失败/非图片/解码失败即中断并通知、不落盘），长边 >4096 或单张 >8MB 才降采样到长边 ≤4096 并转 JPEG 0.98、仍超 8MB 按 0.9→0.8→0.7→0.6 逐档降质量，限内图片不重编码（远程图内联为 dataURL）。角色/场景/道具/影片节点的图片字段、更新路径与核心图片节点 `content` 均适用。
+
 + [修复] opencode harness 三处 turn 问题：侧边栏发送的裸模型名不再静默落到 opencode 默认模型（此前 DeepSeek/MiMo 等请求实际打到已停用的 qiniu 网关，报 403 Account is suspended），失败原因直接透出真实上游错误而非笼统的「opencode 会话出错」；会话级写操作遇到瞬时冲突（如重启后立刻初始化会话）最多等待 2 秒重试，不再直接报「Codex 正在运行或正在切换会话」。
 
-+ [调整] Agent 模型列表只展示 opencode 官方免费模型（`opencode/*-free`），不再列出其他 provider 的模型，避免误选余额不足或已停用的通道。
++ [调整] Agent 模型列表改为跟随 opencode 实际配置：不再写死只列 `opencode/*-free`，而是列出 opencode `/config/providers` 返回的每个已配置 provider 下的全部模型（如匿名网关的免费/默认模型，以及任何已配好凭据的 provider），opencode 增删 provider 或模型后重连即同步；裸模型名仍在 turn 前唯一解析为 `providerID/modelID`，某通道停用或欠费时透出真实上游错误而非静默回退。
 
 + [修复] 侧边栏图片附件跨轮不再失效：同一标签页最近 24 张附件继续保留，新增 `canvas_list_attachments` 查询可用附件，提示词会同时列出本轮与此前附件；附件文件改写到工作空间 `.attachments/<attachmentId>.<扩展名>`，不再使用 `%TEMP%` 随机文件名、不再在 turn 结束时删除，`gif/webp/avif` 等扩展名也按真实类型落盘。
 
