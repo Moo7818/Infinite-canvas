@@ -33,6 +33,7 @@
 * `useBuiltinPanel: {mode, promptPrefix?, writeBackToSelf?}`：零成本复用宿主生成面板，与自定义 `Panel` 二选一。
 * `transparentBackground`（融入画布）、`hidePanel`（纯展示）、`autoOpenPanel`、`forceInteractive`、`keepAspectRatio`、`showInCreateMenu/hasSourceHandle/minimapColor`。
 * `resource(node)`：声明作上游输入时输出 `{kind: image|video|audio|text}`，决定能否连给生成节点。
+* `generate?(ctx)`：声明后宿主可程序化触发本节点的自定义生成（Agent 的 `run_generation`、工具条等走它）——从 `ctx.node.metadata` 读入参、用 `ctx.ai` 生成、写回节点；不声明则 `run_generation` 回退宿主内置流程。角色节点已接入（面板按钮与宿主共用 `runCharacterGenerate`）。
 
 ## 5 工程流
 

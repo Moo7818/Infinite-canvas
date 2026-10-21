@@ -2,6 +2,8 @@
 
 ## Unreleased
 
++ [修复] 自定义插件节点（角色节点）现可经 Agent/MCP 的 `canvas_run_generation` 触发自身生成：节点定义新增宿主可调的 `generate` 能力，角色插件把生成核心抽成 `runCharacterGenerate`（面板"生成"按钮与宿主共用），宿主 `handleGenerateNode` 对声明了 `generate` 的插件节点优先调用其自身生成，修复"人工点面板能生成、Agent 走 MCP 生成不动"。
+
 + [新增] Agent 图片字段支持 `attachment:<附件ID>` 直接作为节点参数写入并超限自动压缩：canvas-agent 把 `attachment:<id>` 展开为附件 dataURL（参考图不再需要先经 `canvas_create_attachment_nodes` 建独立图片节点，附件缺失或跨标签页会中断报错）；浏览器写入画布前对图片字段做超限处理——远程 `http(s)` 图先拉取（失败/非图片/解码失败即中断并通知、不落盘），长边 >4096 或单张 >8MB 才降采样到长边 ≤4096 并转 JPEG 0.98、仍超 8MB 按 0.9→0.8→0.7→0.6 逐档降质量，限内图片不重编码（远程图内联为 dataURL）。角色/场景/道具/影片节点的图片字段、更新路径与核心图片节点 `content` 均适用。
 
 + [修复] opencode harness 三处 turn 问题：侧边栏发送的裸模型名不再静默落到 opencode 默认模型（此前 DeepSeek/MiMo 等请求实际打到已停用的 qiniu 网关，报 403 Account is suspended），失败原因直接透出真实上游错误而非笼统的「opencode 会话出错」；会话级写操作遇到瞬时冲突（如重启后立刻初始化会话）最多等待 2 秒重试，不再直接报「Codex 正在运行或正在切换会话」。

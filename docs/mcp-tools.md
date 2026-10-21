@@ -173,8 +173,8 @@
 - 入参 / Params: `viewport{x, y, k}`
 
 ### `canvas_run_generation`
-- 中文：触发指定节点生成，通常用于配置节点或文本/图片/视频/音频节点。
-- EN: Trigger generation on a node — typically a config, text, image, video, or audio node.
+- 中文：触发指定节点生成。内置节点走配置/文本/图片/视频/音频流程；插件节点若声明 `generate` 能力（如角色节点），会触发该插件自身的生成逻辑（从节点字段拼装提示词并出图，写回节点版本）。
+- EN: Trigger generation on a node. Built-in nodes use the config/text/image/video/audio flow; plugin nodes that declare a `generate` capability (e.g. the character node) run their own generation (assembling a prompt from node fields and writing back a version).
 - 入参 / Params: `nodeId`(必填/required), `mode?`, `prompt?`
 
 ## 4. 生成状态 Generation status（1）
@@ -225,8 +225,8 @@
 
 ## 已知边界 Known limitations
 
-- 中文：节点类型枚举锁死五核心（`schemas.ts:6`），但已提供 5 个语义化工具创建插件节点（角色/场景/道具/宫格/影片）；`add_node` 对显式传入但未注册的 nodeType 直接报错（不再静默回退 Text）。插件节点可被读取与按 id 更新，metadata 全量返回（仅 `content` 超 240 字截断）；`run_generation` 对插件节点会走宿主内置流程，不触发插件自身生成（待单独排期）。
-- EN: The node-type enum is locked to the five core types (`schemas.ts:6`), but 5 semantic tools now create plugin nodes (character/scene/prop/grid/film). `add_node` rejects an explicitly provided unregistered nodeType instead of silently falling back to Text. Plugin nodes can be read and updated by id; metadata is returned in full (only `content` is truncated at 240 chars). `run_generation` on a plugin node falls into the host's built-in flow and does not trigger the plugin's own generation (deferred).
+- 中文：节点类型枚举锁死五核心（`schemas.ts:6`），但已提供 5 个语义化工具创建插件节点（角色/场景/道具/宫格/影片）；`add_node` 对显式传入但未注册的 nodeType 直接报错（不再静默回退 Text）。插件节点可被读取与按 id 更新，metadata 全量返回（仅 `content` 超 240 字截断）；`run_generation` 对声明了 `generate` 的插件节点会触发其自身生成（角色节点已接入，其余插件按需实现 `generate` 即可）。
+- EN: The node-type enum is locked to the five core types (`schemas.ts:6`), but 5 semantic tools now create plugin nodes (character/scene/prop/grid/film). `add_node` rejects an explicitly provided unregistered nodeType instead of silently falling back to Text. Plugin nodes can be read and updated by id; metadata is returned in full (only `content` is truncated at 240 chars). `run_generation` triggers a plugin node's own generation when the node declares a `generate` capability (the character node is wired up; other plugins opt in by implementing `generate`).
 - 中文：**项目级 CRUD 缺失**——没有新建/重命名/删除画布的工具；新建画布只能借助 `site_navigate("/canvas?mode=new")` 触发网页自动流程（默认标题"无限画布 N"）。
 - EN: **No project-level CRUD** — there is no tool to create/rename/delete a canvas. Creating relies on `site_navigate("/canvas?mode=new")`, which triggers the web app's auto-create flow (default title "Canvas N").
 - 中文：图片字段（`faceImages`、`styleImage`、`refs` 等）接受 `data:image/...` dataURL、`http(s)` URL 或 `attachment:<附件ID>`（用户上传图，用 `canvas_list_attachments` 查 ID）；参考图直接作为节点参数写入，不必再经 `canvas_create_attachment_nodes` 建独立图片节点。`file://`、`blob:`、相对路径、画布节点 ID 会直接报错，数量上限按插件字段在 MCP 层强制（如 `faceImages` 3、`outfitImages` 2、`refs` 9），超量直接拒绝。`attachment:<附件ID>` 由 canvas-agent 展开为该附件的 dataURL 再写入，附件缺失或不属于当前标签页会中断并报错。写入画布前浏览器对图片字段做超限自动处理：远程 `http(s)` 图先拉取（失败/非图片/解码失败即中断并通知，不落盘），长边 >4096 或单张 >8MB 才压缩——降采样到长边 ≤4096 并转 JPEG 0.98，仍超 8MB 按 0.9→0.8→0.7→0.6 逐档降质量；限内图片不重编码（远程图内联为 dataURL）。更新路径（`canvas_update_node`、`canvas_apply_ops` 的 `update_node`）同样校验与压缩，核心图片节点的 `metadata.content` 也走同一套规则。`metadata`/`patch` 推荐传对象，传 JSON 字符串会被自动解析。
