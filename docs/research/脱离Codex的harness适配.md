@@ -42,14 +42,23 @@
 新建 `agent/harness.ts` 接口（startThread/startTurn/interrupt/approve/mapEvents…），Codex/Claude 收敛为实现；路由去 Codex 前缀；`codex_state`→`agent_state` 等改名属**破坏性协议变更**（升 `AGENT_PROTOCOL_VERSION`，旧面板强断连）。
 - 风险：`http.ts`/`session.ts` 是上游热点文件，后续上游同步冲突最高；三个大测试文件断言需全改。**仅在确认长期维护多 harness 时做。**
 
-## 5. 接侧边栏级体验的通用技术路径（已有验证样例）
-
-任何具备"本地服务 + SSE 事件流 + 会话 API + 权限确认端点"四件套的 harness，都可仿 Codex 适配器接入侧边栏。已在仓库内验证的样例（以 opencode SDK 为例，仅作能力模板，不代表目标平台）：
+## 5. 接侧边栏级体验的通用技术路径（已有验证样例）任何具备"本地服务 + SSE 事件流 + 会话 API + 权限确认端点"四件套的 harness，都可仿 Codex 适配器接入侧边栏。已在仓库内验证的样例（以 opencode SDK 为例，仅作能力模板，不代表目标平台）：
 
 `@opencode-ai/sdk@1.18.30` 在依赖树中（`.opencode/package-lock.json:129-131`），其能力面：`createOpencodeServer`（`node_modules/@opencode-ai/sdk/dist/server.d.ts:17`）、SSE 事件流（`message.part.updated`/`session.status`/`session.idle`）、会话多轮（`session.create/prompt/abort/fork/messages`）、**权限确认流**（`permission.updated` + 回执端点 `POST /session/{id}/permissions/{permissionID}`）。
 
 **通用路径**：新增 `canvas-agent/src/agent/<harness>.ts` 适配器——起 harness 本地服务 → 创建会话并投递 prompt → 订阅事件流，映射为现有 `turn.*/item.*` 与审批卡（即落方案 b 的通用 turn 端点后，所有 harness 按同一映射表接入）。
 - 风险：各 SDK 迭代快；客户端侧作为 MCP 消费端调画布工具的审批策略需逐家确认。
+
+## 5.1 方案 b 实施状态（opencode 已落地）
+
+MVP 已实现并完成端到端验收（保持端点路径与事件合同不变）：
+
+- **分派**：`config.ts` 新增 `harness` 字段与 `agentHarness()`，默认 `opencode`，显式 `"harness": "codex"` 回退；`server/http.ts` 全部 `/agent/codex/*` 端点改指 `agent/runtime.ts` 分派层；新适配器为 `agent/opencode.ts`（镜像 Codex 对外接口）+ `agent/opencode-client.ts`（SDK spawn + SSE 事件泵归一化）。
+- **服务拉起**：SDK `createOpencode` spawn `opencode serve`（固定端口 17372），`OPENCODE_CONFIG_CONTENT` 注入 infinite-canvas MCP（扁平 `mcp.<name>` 形状，`mcp.servers.<name>` 会在 1.x CLI 校验失败导致所有端点 500）。
+- **turn 模型**：同步 `session.prompt`（1.x CLI 没有 `message-async` 异步端点，SDK 路径会命中 SPA 兜底 HTML）；`messageID` 必须以 `msg` 开头否则 400；终态由事件泵 `session.idle`/`session.error` 驱动，`turnId` 用 user message id。
+- **事件泵**：`/event` SSE 必须 `query.directory` 指定工作空间目录订阅，否则只收到 `server.*` 全局事件、会话级事件全部缺失；SDK `RequestResult` 非 throw（错误以 `{error}` 字段返回）必须自行解包。
+- **验收结论**：models/threads/turn 门禁/流式 `turn.*/item.*`/`mcp_tool_call`/中断/历史回读均通过（免费模型验证，如 `opencode/minimax-m3.1-flash-free`）；审批卡与 usage 未验证；共享 `opencode.db` 下 npm 1.17.10 CLI 写旧 `session` 表导致 `session_message` 外键失败，需 1.19.3+（桌面版 2.1 写 `session_v2`）。
+- **遗留**：opencode 二进制来源待定（升级全局 npm / 配置 `opencodeBin`）；前端仍是 Codex 词表（文案层面）。
 
 ## 6. 建议
 
