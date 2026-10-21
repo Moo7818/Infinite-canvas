@@ -1,11 +1,14 @@
 import crypto from "node:crypto";
 
 import type { ToolName } from "./schemas.js";
-import { assertImageContent, assertNodeImageFields } from "./schemas.js";
+import { assertImageContent, assertNodeImageFields, imageFieldsFor } from "./schemas.js";
 import { nextCanvasX } from "./tools.js";
 import type { CanvasNode, CanvasNodeType, CanvasSnapshot } from "./types.js";
 
 export type CanvasToolRequest = { name: "canvas_apply_ops"; input: Record<string, unknown> };
+
+/** 把 attachment:<附件ID> 解析成图片 dataURL 的回调，由会话层按当前标签页附件表提供。 */
+export type AttachmentResolver = (attachmentId: string) => string;
 
 /** 语义化插件节点工具与画布节点类型 ID 的映射。 */
 const PLUGIN_NODE_TYPES = {
@@ -16,8 +19,15 @@ const PLUGIN_NODE_TYPES = {
     canvas_create_film_node: "video:film",
 };
 
+/** 将上层画布工具调用转换为前端可执行的批量操作，并把图片字段里的 attachment:<附件ID> 展开为 dataURL。 */
+export function buildCanvasToolRequest(name: ToolName, input: Record<string, unknown>, state: CanvasSnapshot | null, resolveAttachment?: AttachmentResolver): CanvasToolRequest {
+    const request = buildRequest(name, input, state);
+    if (resolveAttachment) expandImageAttachments(request.input.ops as Array<Record<string, unknown>> | undefined, state, resolveAttachment);
+    return request;
+}
+
 /** 将上层画布工具调用转换为前端可执行的批量操作。 */
-export function buildCanvasToolRequest(name: ToolName, input: Record<string, unknown>, state: CanvasSnapshot | null): CanvasToolRequest {
+function buildRequest(name: ToolName, input: Record<string, unknown>, state: CanvasSnapshot | null): CanvasToolRequest {
     if (name === "canvas_apply_ops") {
         const ops = (input as { ops?: Array<Record<string, unknown>> }).ops || [];
         for (const op of ops) {
@@ -113,6 +123,34 @@ export function buildCanvasToolRequest(name: ToolName, input: Record<string, unk
         return applyOps([runGenerationOp(data.nodeId, generationMode(data.mode), data.prompt)]);
     }
     throw new Error(`未知工具：${name}`);
+}
+
+/** 遍历批量操作，把插件节点与图片节点里的 attachment:<附件ID> 就地展开为 dataURL。 */
+function expandImageAttachments(ops: Array<Record<string, unknown>> | undefined, state: CanvasSnapshot | null, resolve: AttachmentResolver) {
+    for (const op of ops || []) {
+        if (op.type === "add_node") expandMetadataImages(String(op.nodeType || ""), op.metadata as Record<string, unknown> | undefined, resolve);
+        if (op.type === "update_node") {
+            const nodeType = String(findNode(state, String(op.id || ""))?.type || "");
+            expandMetadataImages(nodeType, op.metadata as Record<string, unknown> | undefined, resolve);
+            expandMetadataImages(nodeType, (op.patch as Record<string, unknown> | undefined)?.metadata as Record<string, unknown> | undefined, resolve);
+        }
+    }
+}
+
+/** 展开单个 metadata 里所有图片字段的 attachment 引用。 */
+function expandMetadataImages(nodeType: string, metadata: Record<string, unknown> | undefined, resolve: AttachmentResolver) {
+    if (!metadata) return;
+    for (const field of imageFieldsFor(nodeType)) {
+        const value = metadata[field];
+        if (Array.isArray(value)) metadata[field] = value.map((item) => expandAttachmentRef(item, resolve));
+        else if (typeof value === "string") metadata[field] = expandAttachmentRef(value, resolve);
+    }
+}
+
+/** 把 attachment:<附件ID> 换成 dataURL，其余取值原样返回。 */
+function expandAttachmentRef(value: unknown, resolve: AttachmentResolver) {
+    if (typeof value === "string" && /^attachment:/i.test(value)) return resolve(value.slice("attachment:".length).trim());
+    return value;
 }
 
 /** 按最大边限制计算附件图片节点尺寸，并保持原始比例。 */

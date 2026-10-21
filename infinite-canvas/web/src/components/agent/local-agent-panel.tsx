@@ -20,6 +20,7 @@ import { useAgentSkillStore } from "@/stores/use-agent-skill-store";
 import { useShallow } from "zustand/react/shallow";
 import { useAgentStore, type AgentAttachment, type AgentBootstrapStatus, type AgentCanvasContext, type AgentCanvasReference, type AgentChatItem, type AgentConversationState, type AgentModel, type AgentPendingApproval, type AgentPendingToolCall, type AgentPermissionMode, type AgentReasoningEffort, type AgentThreadSummary } from "@/stores/use-agent-store";
 import { type CanvasAgentOp, type CanvasAgentSnapshot } from "@/lib/canvas/canvas-agent-ops";
+import { normalizeAgentImageOps } from "@/lib/canvas/agent-image-normalize";
 import { isSiteTool, runSiteTool } from "@/lib/agent/agent-site-tools";
 import { acknowledgeCodexHistory, activateAgentClient, AgentApiError, discoverAgentConfig, fetchAgentJson, interruptCodexTurn, postCodexApproval, postState, postToolResult } from "@/services/api/canvas-agent";
 import { AgentChatTimeline, AgentTaskProgress, AgentUsageBar } from "./agent-chat";
@@ -829,6 +830,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             } else if (payload.name === "canvas_apply_ops") {
                 const context = canvasContextRef.current;
                 if (!context) throw new Error(rt("openCanvasFirst"));
+                appliedOps = await normalizeAgentImageOps(appliedOps, context.snapshot.nodes);
                 result = context.applyOps(appliedOps);
                 void postState(endpoint, token, clientIdRef.current, result as CanvasAgentSnapshot);
             } else if (payload.name === "canvas_create_attachment_nodes") {

@@ -172,3 +172,86 @@ function loadImage(dataUrl: string) {
         image.src = dataUrl;
     });
 }
+
+// Agent 写入图片字段的超限自动处理阈值：长边 ≤4096、单张 ≤8MB，超限转 JPEG 0.98 起、按档降到 0.6。
+export const AGENT_IMAGE_MAX_EDGE = 4096;
+export const AGENT_IMAGE_BYTE_BUDGET = 8 * 1024 * 1024;
+export const AGENT_IMAGE_QUALITY_STEPS = [0.98, 0.9, 0.8, 0.7, 0.6];
+
+/**
+ * Agent 写入节点图片字段前的超限自动处理：远程 URL 先拉取（失败/非图片/解码失败即抛错中断，交由调用方通知 Agent），
+ * dataURL 直接解码；长边 >4096 或字节 >8MB 才压缩——降采样到 ≤4096 并转 JPEG 0.98，仍超 8MB 按 0.9→0.8→0.7→0.6 逐档降。
+ * 限内图片不做无谓重编码：dataURL 原样返回，远程图内联为 dataURL（自包含，避免日后链接失效）。
+ */
+export async function compressAgentImage(value: string): Promise<string> {
+    if (typeof value !== "string" || !value) return value;
+    const isRemote = /^https?:\/\//i.test(value);
+    const isDataUrl = /^data:image\//i.test(value);
+    if (!isRemote && !isDataUrl) return value;
+
+    let objectUrl = "";
+    try {
+        let remoteBlob: Blob | undefined;
+        let source = value;
+        if (isRemote) {
+            let response: Response;
+            try {
+                response = await fetch(value);
+            } catch (error) {
+                throw new Error(`参考图拉取失败：${value}（${error instanceof Error ? error.message : "网络错误"}），已停止写入`);
+            }
+            if (!response.ok) throw new Error(`参考图拉取失败：${value}（HTTP ${response.status}），已停止写入`);
+            remoteBlob = await response.blob();
+            if (!remoteBlob.type.startsWith("image/")) throw new Error(`参考图不是图片：${value}（${remoteBlob.type || "未知类型"}），已停止写入`);
+            objectUrl = URL.createObjectURL(remoteBlob);
+            source = objectUrl;
+        }
+
+        const image = await decodeImage(source);
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+        const bytes = remoteBlob ? remoteBlob.size : dataUrlByteSize(value);
+        const longEdge = Math.max(width, height);
+
+        if (bytes <= AGENT_IMAGE_BYTE_BUDGET && longEdge <= AGENT_IMAGE_MAX_EDGE) {
+            return remoteBlob ? await blobToDataUrl(remoteBlob) : value;
+        }
+
+        const scale = Math.min(1, AGENT_IMAGE_MAX_EDGE / longEdge);
+        const canvas = drawResizeCanvas(image, width, height, Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)), "high");
+        let output = canvas.toDataURL("image/jpeg", AGENT_IMAGE_QUALITY_STEPS[0]);
+        for (let step = 1; step < AGENT_IMAGE_QUALITY_STEPS.length && dataUrlByteSize(output) > AGENT_IMAGE_BYTE_BUDGET; step += 1) {
+            output = canvas.toDataURL("image/jpeg", AGENT_IMAGE_QUALITY_STEPS[step]);
+        }
+        return output;
+    } catch (error) {
+        if (error instanceof Error && error.message.includes("已停止写入")) throw error;
+        throw new Error(`参考图处理失败：${value.slice(0, 120)}（${error instanceof Error ? error.message : "未知错误"}），已停止写入`);
+    } finally {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+}
+
+function decodeImage(src: string) {
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("图片解码失败"));
+        image.src = src;
+    });
+}
+
+function dataUrlByteSize(dataUrl: string) {
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0) return 0;
+    return Math.floor(((dataUrl.length - comma - 1) * 3) / 4);
+}
+
+function blobToDataUrl(blob: Blob) {
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error || new Error("读取图片失败"));
+        reader.readAsDataURL(blob);
+    });
+}

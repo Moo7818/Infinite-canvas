@@ -488,7 +488,7 @@ export class CanvasSession {
         }
         if (name === "canvas_create_attachment_nodes") return await this.createAttachmentNodes(input as { attachmentIds: string[]; x?: number; y?: number; gap?: number; direction?: "row" | "column" });
         if (!this.clients.size) throw new Error("当前没有已连接画布");
-        const request = buildCanvasToolRequest(name, input, this.canvasState);
+        const request = buildCanvasToolRequest(name, input, this.canvasState, (attachmentId) => this.getTurnAttachment(this.targetClientId, attachmentId).dataUrl);
         return await this.requestCanvasTool(request.name, request.input);
     }
 

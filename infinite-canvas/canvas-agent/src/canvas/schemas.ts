@@ -115,9 +115,9 @@ const pluginNodeBase = {
     height: z.number().optional(),
 };
 
-/** 图片字段只接受 dataURL 或 http(s) URL，显式拒绝本地路径／临时文件／节点 ID。 */
-const imageRefSchema = z.string().refine((value) => /^data:image\//i.test(value) || /^https?:\/\//i.test(value), {
-    message: "图片必须是 data:image/... dataURL 或 http(s) URL；file://、blob:、相对路径和画布节点 ID 都不能直接作为图片地址。需要把用户上传的图片放进画布时，先调用 canvas_create_attachment_nodes 生成图片节点，再用返回的节点 ID 作为生成参考。",
+/** 图片字段接受 dataURL、http(s) URL 或 attachment:<附件ID>，显式拒绝本地路径／临时文件／节点 ID。 */
+const imageRefSchema = z.string().refine((value) => /^data:image\//i.test(value) || /^https?:\/\//i.test(value) || /^attachment:.+/i.test(value), {
+    message: "图片字段接受三种写法：data:image/... dataURL、http(s) URL、或 attachment:<附件ID>（用户上传图，用 canvas_list_attachments 查 ID）。file://、blob:、相对路径和画布节点 ID 都不支持；参考图直接作为节点参数写入即可，不要再调用 canvas_create_attachment_nodes 建图片节点。",
 });
 
 /** 图片数组字段：格式与插件侧上限一起校验，超量直接报错，避免拖到生图时才失败。 */
@@ -131,9 +131,15 @@ export const IMAGE_FIELD_LIMITS: Record<string, Array<{ field: string; max: numb
     "video:film": [{ field: "refs", max: 9 }],
 };
 
-/** 判断字符串是否是合法图片地址：data:image/... dataURL 或 http(s) URL。 */
+/** 判断字符串是否是合法图片地址：data:image/... dataURL、http(s) URL 或 attachment:<附件ID>。 */
 function isImageAddress(value: unknown) {
-    return typeof value === "string" && (/^data:image\//i.test(value) || /^https?:\/\//i.test(value));
+    return typeof value === "string" && (/^data:image\//i.test(value) || /^https?:\/\//i.test(value) || /^attachment:.+/i.test(value));
+}
+
+/** 列出某节点类型里承载图片的 metadata 字段名，供附件展开与前端压缩共用（image 节点为 content）。 */
+export function imageFieldsFor(nodeType: string): string[] {
+    if (nodeType === "image") return ["content"];
+    return (IMAGE_FIELD_LIMITS[nodeType] || []).map((item) => item.field);
 }
 
 /** 校验插件节点图片字段（格式 + 数量上限），供更新路径复用，避免绕过创建时的收紧。 */
@@ -145,7 +151,7 @@ export function assertNodeImageFields(nodeType: string, ...payloads: Array<Recor
             const list = Array.isArray(value) ? value : [value];
             if (list.length > max) throw new Error(`${field} 最多 ${max} 张图片`);
             if (!list.every((item) => isImageAddress(item))) {
-                throw new Error(`${field} 只能使用 data:image/... dataURL 或 http(s) URL；file://、blob:、相对路径和画布节点 ID 不支持，用户上传的图片先用 canvas_create_attachment_nodes 生成图片节点`);
+                throw new Error(`${field} 只能使用 data:image/... dataURL、http(s) URL 或 attachment:<附件ID>（用 canvas_list_attachments 查 ID）；file://、blob:、相对路径和画布节点 ID 不支持。参考图直接作为节点参数写入，不要建附件节点`);
             }
         }
     }
@@ -158,7 +164,7 @@ export function assertImageContent(nodeType: string, ...payloads: Array<Record<s
         const content = payload?.content;
         if (typeof content !== "string" || !content) continue;
         if (!isImageAddress(content)) {
-            throw new Error("图片节点 content 只能使用 data:image/... dataURL 或 http(s) URL；file://、blob:、相对路径和画布节点 ID 不支持，用户上传的图片先用 canvas_create_attachment_nodes 生成图片节点");
+            throw new Error("图片节点 content 只能使用 data:image/... dataURL、http(s) URL 或 attachment:<附件ID>（用 canvas_list_attachments 查 ID）；file://、blob:、相对路径和画布节点 ID 不支持");
         }
     }
 }
@@ -287,11 +293,11 @@ export const toolDescriptions: Record<ToolName, string> = {
     canvas_create_image_prompt_flow: "创建提示词文本节点和图片生成配置节点，并自动连线，可选择立即触发生图。",
     canvas_create_generation_flow: "创建通用生成流程：提示词文本节点、生成配置节点、参考节点连线，可用于文案、生图、视频或音频。referenceNodeIds 传画布节点 ID（用户上传的图片先经 canvas_create_attachment_nodes 变成图片节点）。",
     canvas_list_node_types: "列出当前网页已注册的画布节点类型，包含节点类型 ID、标题、所属插件和默认尺寸。插件节点不在 canvas_create_node 的固定枚举内，创建前先用本工具确认类型 ID。",
-    canvas_create_character_node: "在当前画布创建角色节点。name、age、traits、style 描述角色；faceImages（≤3）、outfitImages（≤2）、extraImages（≤3）为参考图数组。图片只接受 data:image/... base64 dataURL 或 http(s) URL，禁止 file://、本地路径、blob:、相对路径和画布节点 ID；用户上传的图片必须先用 canvas_create_attachment_nodes 转成图片节点，生成时用节点 ID（referenceNodeIds），不要把临时文件或 .attachments 路径写进图片字段。",
-    canvas_create_scene_node: "在当前画布创建场景节点。name、time、style、camera 描述场景；envImages（≤3）、lightImages（≤2）、extraImages（≤2）为参考图数组，styleImage 为单张风格图。图片只接受 data:image/... base64 dataURL 或 http(s) URL，禁止 file://、本地路径、blob:、相对路径和画布节点 ID；用户上传的图片先经 canvas_create_attachment_nodes 转成图片节点。",
-    canvas_create_prop_node: "在当前画布创建道具节点。name、category、style、view 描述道具；materialImages（≤2）、detailImages（≤3）、extraImages（≤2）为参考图数组，styleImage 为单张风格图。图片只接受 data:image/... base64 dataURL 或 http(s) URL，禁止 file://、本地路径、blob:、相对路径和画布节点 ID；用户上传的图片先经 canvas_create_attachment_nodes 转成图片节点。",
+    canvas_create_character_node: "在当前画布创建角色节点。name、age、traits、style 描述角色；faceImages（≤3）、outfitImages（≤2）、extraImages（≤3）为参考图数组。参考图直接作为节点参数写入，接受 data:image/... base64 dataURL、http(s) URL 或 attachment:<附件ID>（用户上传图用 canvas_list_attachments 查 ID）；禁止 file://、本地路径、blob:、相对路径和画布节点 ID。不要再为参考图调用 canvas_create_attachment_nodes 建独立图片节点；超限图片会自动压缩（长边≤4096、JPEG），远程图拉取失败会中断并报错。",
+    canvas_create_scene_node: "在当前画布创建场景节点。name、time、style、camera 描述场景；envImages（≤3）、lightImages（≤2）、extraImages（≤2）为参考图数组，styleImage 为单张风格图。参考图直接作为节点参数写入，接受 data:image/... base64 dataURL、http(s) URL 或 attachment:<附件ID>（用户上传图用 canvas_list_attachments 查 ID）；禁止 file://、本地路径、blob:、相对路径和画布节点 ID。不要再为参考图调用 canvas_create_attachment_nodes 建独立图片节点；超限图片会自动压缩（长边≤4096、JPEG），远程图拉取失败会中断并报错。",
+    canvas_create_prop_node: "在当前画布创建道具节点。name、category、style、view 描述道具；materialImages（≤2）、detailImages（≤3）、extraImages（≤2）为参考图数组，styleImage 为单张风格图。参考图直接作为节点参数写入，接受 data:image/... base64 dataURL、http(s) URL 或 attachment:<附件ID>（用户上传图用 canvas_list_attachments 查 ID）；禁止 file://、本地路径、blob:、相对路径和画布节点 ID。不要再为参考图调用 canvas_create_attachment_nodes 建独立图片节点；超限图片会自动压缩（长边≤4096、JPEG），远程图拉取失败会中断并报错。",
     canvas_create_grid_node: "在当前画布创建宫格节点（2×2 四宫格）。用 castIds 传入角色节点 ID（有序），castNames 保存角色名快照，spaceId/spaceName 关联场景节点，doc 填写整体说明。",
-    canvas_create_film_node: "在当前画布创建影片节点。可设置 name、model、ratio（如 16:9）、seconds、prompt；refs 为参考图数组（≤9）。图片只接受 data:image/... base64 dataURL 或 http(s) URL，禁止 file://、本地路径、blob:、相对路径和画布节点 ID；用户上传的图片先经 canvas_create_attachment_nodes 转成图片节点。生成仍在节点面板内触发。",
+    canvas_create_film_node: "在当前画布创建影片节点。可设置 name、model、ratio（如 16:9）、seconds、prompt；refs 为参考图数组（≤9）。参考图直接作为节点参数写入，接受 data:image/... base64 dataURL、http(s) URL 或 attachment:<附件ID>（用户上传图用 canvas_list_attachments 查 ID）；禁止 file://、本地路径、blob:、相对路径和画布节点 ID。不要再为参考图调用 canvas_create_attachment_nodes 建独立图片节点；超限图片会自动压缩（长边≤4096、JPEG），远程图拉取失败会中断并报错。生成仍在节点面板内触发。",
     canvas_generate_text: "创建通用文本生成流程并立即触发生成。",
     canvas_generate_image: "创建通用图片生成流程并立即触发生成。",
     canvas_generate_video: "创建通用视频生成流程并立即触发生成。",

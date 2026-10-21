@@ -109,6 +109,36 @@ test("图片附件只允许发起 turn 的标签页读取和落入画布", async
     assert.equal(second.event("tool_call"), undefined);
 });
 
+test("图片字段的 attachment:<id> 展开为 dataURL 直接写入节点参数，不建附件节点", async (t) => {
+    const session = new CanvasSession();
+    const first = connect(session, "first");
+    t.after(() => first.close());
+    const dataUrl = "data:image/png;base64,aW1hZ2U=";
+    session.setTurnAttachments("first", [{ id: "attachment-1", name: "容貌.png", type: "image/png", size: 5, width: 800, height: 600, dataUrl }]);
+    session.bindClient("first");
+
+    const result = session.callTool("canvas_create_character_node", { name: "林晚棠", faceImages: ["attachment:attachment-1", "https://example.com/ref.png"] });
+    const call = first.event("tool_call");
+    assert.equal(field(call, "name"), "canvas_apply_ops");
+    const ops = (field(call, "input") as Record<string, unknown>).ops as Array<Record<string, any>>;
+    assert.equal(ops[0].nodeType, "character:role");
+    assert.deepEqual(ops[0].metadata.faceImages, [dataUrl, "https://example.com/ref.png"]);
+
+    session.resolveResult("first", { requestId: String(field(call, "requestId")), result: { ok: true } });
+    assert.deepEqual(await result, { ok: true });
+});
+
+test("图片字段引用不存在的附件时中断，且不向画布发送任何操作", async (t) => {
+    const session = new CanvasSession();
+    const first = connect(session, "first");
+    t.after(() => first.close());
+    session.setTurnAttachments("first", [{ id: "attachment-1", name: "容貌.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }]);
+    session.bindClient("first");
+
+    await assert.rejects(session.callTool("canvas_create_character_node", { faceImages: ["attachment:missing"] }), /找不到图片附件|没有可用的图片附件/);
+    assert.equal(first.event("tool_call"), undefined);
+});
+
 test("tool result is accepted only from the request client", async (t) => {
     const session = new CanvasSession();
     const first = connect(session, "first");
@@ -583,7 +613,7 @@ test("图片字段拒绝本地路径、blob 和节点 ID", async (t) => {
     session.updateState(snapshot("canvas-first"), "first");
 
     for (const faceImages of [["file:///C:/Windows/Temp/a.jpg"], ["blob:http://localhost/a"], ["/face_ref.jpg"], ["image-01ecece6"]]) {
-        await assert.rejects(session.callTool("canvas_create_character_node", { name: "林晚棠", faceImages }), /dataURL 或 http/);
+        await assert.rejects(session.callTool("canvas_create_character_node", { name: "林晚棠", faceImages }), /data:image/);
     }
     assert.equal(first.event("tool_call"), undefined);
 });
