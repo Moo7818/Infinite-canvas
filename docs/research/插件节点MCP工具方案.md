@@ -56,11 +56,29 @@ mcp.ts:13 注册（遍历 toolNames）→ http.ts:172 /api/tools → session.ts:
 - 入参：`{ pluginId?: string }`；返回 `listNodeDefinitions()`（`node-registry.ts:42-44`）→ `{type, title, pluginId, defaultSize, hasTargetHandle, resourceKind, showInCreateMenu…}`。
 - 改动：形态 A 全套。解决"Agent 不知道有哪些插件节点"的可发现性。
 
-### 候选 2：`canvas_create_plugin_node`（写，补"建插件节点"缺口）
-- 入参：`{ type: string（开放字符串）, title?, x?, y?, width?, height?, metadata? }`。
-- 行为：新工具分支归一成 `add_node`；**浏览器侧对未注册类型改为报错**（消掉 `canvas-agent-ops.ts:46` 静默回退坑）。
-- 备选更小改法：`nodeTypeSchema` 直接放宽为 `z.string()`（同时影响 `canvas_create_node` 与 `add_node` op）——必须配套浏览器校验。
-- 注意：是否纳入浏览器确认门（`agent-event-formatters.ts:507-509` 现仅覆盖 apply_ops/create_attachment_nodes）。
+### 候选 2：语义化创建工具——每个插件一个专属工具（已拍板：B 纯语义）
+> 形态对比（A 通用 type / C 别名折中 / B 纯语义）已讨论，**拍板取 B**：工具名即意图，Agent 零学习成本，且入参可带插件专属字段一步到位（建出即可生成的非空节点），避免"先建空节点再 update metadata"的绕路。
+
+**工具面（5 个，对齐 5 个插件）**：
+
+| 工具 | 固定 nodeType | 专属入参（对齐插件 Fields） |
+|---|---|---|
+| `canvas_create_character_node` | `character:role` | `name? age? traits? style? faceText? faceImages[]? outfitText? outfitImages[]? extraText? extraImages[]?` |
+| `canvas_create_scene_node` | `scene:view` | `name? time? style? styleImage? envText? envImages[]? lightText? lightImages[]? camera? extraText? extraImages[]?` |
+| `canvas_create_prop_node` | `prop:item` | `name? category? style? styleImage? materialText? materialImages[]? detailText? detailImages[]? view? extraText? extraImages[]?` |
+| `canvas_create_grid_node` | `grid:board` | `name? castIds[]? spaceId? doc?` |
+| `canvas_create_film_node` | `video:film` | `name? model? ratio? seconds? prompt? refs[]?` |
+
+公共入参：`title? x? y? width? height?`；`autoRun?` 暂不设（生成触发归候选 3，避免落到 `:2443-2450` 毁节点坑）。
+
+**行为**：每个工具在 `operations.ts` 归一成 `{type:"add_node", nodeType:<固定>, metadata:<专属字段>}` → 沿用 `applyOps`；**浏览器侧对未注册类型改为报错**（消掉 `canvas-agent-ops.ts:46` 静默回退 Text 坑，插件未加载时报错而不是建错）。
+
+**改动文件（形态 B 全套 ×5）**：`schemas.ts`（toolNames/toolInputSchemas/toolDescriptions 各 +5，专属字段用 zod object 显式建 schema——比通用 metadata 更强的入参校验）、`operations.ts` 归一分支、`codex-history.ts:700-739` 展示名 +5、`agent-event-formatters.ts:507-509` 是否进确认门、i18n、`docs/mcp-tools.md`、`session.test.ts`。
+
+**已知代价（拍板时已知悉）**：
+- 工具数 34 → 39（token 成本）；
+- **插件清单耦合进 canvas-agent**：插件是 `web/public/plugins/` 动态发现、可热载的，canvas-agent 是独立发版的 npm 包——**以后每装一个新插件，都要给 canvas-agent 加对应工具并发版**。缓解：`canvas_list_node_types` 保证已装插件可发现；新增插件的配套工具进常规发版节奏。
+- 可选收口：5 个工具外留一个通用 `canvas_create_plugin_node` 兜底未适配类型（可后补，不阻塞首期）。
 
 ### 候选 3：`canvas_run_plugin_generation`（真正触发插件生成，需契约拍板）
 - 入参：`{ nodeId, prompt? }`。落地三选一（侵入度递增）：
@@ -73,4 +91,4 @@ mcp.ts:13 注册（遍历 toolNames）→ http.ts:172 /api/tools → session.ts:
 
 ## 5. 建议节奏
 
-候选 1（纯只读）→ 候选 2（补齐创建，处理静默回退坑）→ 候选 3（需产品/契约拍板）。候选 1+2 只动 canvas-agent 服务端 + 宿主浏览器层，不动 5 个插件本体；候选 3 涉及 SDK 契约双同步与 5 插件重打，建议单独排期。
+候选 1（纯只读）→ 候选 2（5 个语义创建工具，处理静默回退坑）→ 候选 3（需产品/契约拍板）。候选 1+2 只动 canvas-agent 服务端 + 宿主浏览器层，不动 5 个插件本体；候选 3 涉及 SDK 契约双同步与 5 插件重打，建议单独排期。后续新增插件时，配套语义工具随 canvas-agent 常规发版补齐（候选 2 已确立的耦合代价）。
