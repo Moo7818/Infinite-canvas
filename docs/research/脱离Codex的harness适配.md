@@ -1,7 +1,7 @@
 # 脱离 Codex：其他 harness 适配方案调研
 
-> 调研范围：`infinite-canvas/canvas-agent/src/`（上游 v0.19.0）+ 本仓库 `.opencode/`。全部结论带文件:行号。
-> 结论先行：**MCP 工具层已对所有 harness 开放（opencode 已接入）；Codex 独占的是侧边栏多轮体验（turn 管线）。** 存在三条适配路线，工作量 2-5 天 / 1-2 周 / 2-4 周递增。
+> 调研范围：`infinite-canvas/canvas-agent/src/`（上游 v0.19.0）+ 本仓库 MCP 客户端注册实例。全部结论带文件:行号。
+> 结论先行：**MCP 工具层对任意 MCP 客户端（harness）开放，接入方式协议无关；Codex 独占的只是侧边栏多轮体验（turn 管线）。** 存在三条适配路线，工作量 2-5 天 / 1-2 周 / 2-4 周递增。本文不绑定任何特定目标平台，方案对 Claude Code、Codex 之外的 CLI/SDK 类 harness 一律通用。
 
 ## 1. Codex 耦合点清单（程度分级）
 
@@ -23,7 +23,7 @@
 
 ## 3. MCP-only 模式：其他 harness 今天能拿到什么
 
-**能拿（全量工具层能力，对所有客户端一致）**：34 工具全部读写画布/工作台/生成；**浏览器写操作确认卡对任何 harness 的 MCP 调用都生效**（`agent-event-formatters.ts:507-509` 确认门不是 Codex 专属）；多轮上下文由 harness 自己承担。README:147-157 官方给出 Claude Code `claude mcp add` 接法；opencode 已注册（`.opencode/opencode.json:3-11`）。
+**能拿（全量工具层能力，对所有客户端一致）**：34 工具全部读写画布/工作台/生成；**浏览器写操作确认卡对任何 harness 的 MCP 调用都生效**（`agent-event-formatters.ts:507-509` 确认门不是 Codex 专属）；多轮上下文由 harness 自己承担。接入是纯协议行为：README:147-157 官方给出 Claude Code `claude mcp add` 接法，本仓库亦有任意 MCP 客户端的注册实例（`.opencode/opencode.json:3-11`，仅作示例，其他客户端同理——stdio 起 `npx -y @basketikun/canvas-agent@latest mcp` 即可）。
 
 **拿不到（侧边栏专属）**：过程时间线（思考/计划/工具卡）；多轮会话历史/线程列表；权限审批卡（MCP-only 场景由客户端自身策略处理）；图片附件管线（`canvas_create_attachment_nodes` 依赖 Codex turn 附件，`session.ts:339-372`）；模型/力度/权限选择；停止按钮。
 
@@ -31,24 +31,26 @@
 
 ### 方案 a：纯 MCP 增强（2-5 天，零协议风险，全客户端受益）
 把 turn 级能力沉淀成 MCP 工具：附件入口 harness 无关化（`session.ts:339-372` 接受 dataUrl 而非仅 turn 附件）、会话/时间线只读工具、`agent_interrupt` 等。改动集中在 `schemas.ts` + `session.ts`，不动协议不动前端。
-- 收益：opencode/Claude Code 立即补齐附件等缺口，与确认卡天然兼容。
+- 收益：任意 MCP 客户端（Claude Code、SDK 类 harness 等）立即补齐附件等缺口，与确认卡天然兼容。
 - 风险：工具数已 34（token 成本）；时间线类"会话感"体验 MCP 单次调用表达力有限。
 
 ### 方案 b：补齐 `/agent/claude/turn` 成通用 turn 端点（1-2 周）
-`claude.ts` 补事件归一化（stream-json → `turn.*/item.*`）、状态机接入、中断、权限流（Claude Agent SDK `canUseTool`，官方规划方向）、历史持久化；前端加 harness 开关与条件渲染。该通用端点天然是后续 harness（含 opencode）的接入点。
+`claude.ts` 补事件归一化（stream-json → `turn.*/item.*`）、状态机接入、中断、权限流（Claude Agent SDK `canUseTool`，官方规划方向）、历史持久化；前端加 harness 开关与条件渲染。该通用端点天然是后续任意 harness（CLI 或 SDK 类）的接入点。
 - 风险：`claude -p` 一次性进程，多轮需 resume/Agent SDK；Codex 专属 UI 需条件化，回归面较大。
 
 ### 方案 c：harness-neutral 抽象层（2-4 周）
 新建 `agent/harness.ts` 接口（startThread/startTurn/interrupt/approve/mapEvents…），Codex/Claude 收敛为实现；路由去 Codex 前缀；`codex_state`→`agent_state` 等改名属**破坏性协议变更**（升 `AGENT_PROTOCOL_VERSION`，旧面板强断连）。
 - 风险：`http.ts`/`session.ts` 是上游热点文件，后续上游同步冲突最高；三个大测试文件断言需全改。**仅在确认长期维护多 harness 时做。**
 
-## 5. opencode 接侧边栏级体验：技术路径已存在
+## 5. 接侧边栏级体验的通用技术路径（已有验证样例）
 
-仓库内证据：`.opencode/package-lock.json:129-131` 已引入 `@opencode-ai/sdk@1.18.30`；SDK 提供 `createOpencodeServer`（`node_modules/@opencode-ai/sdk/dist/server.d.ts:17`）、SSE 事件流（`message.part.updated`/`session.status`/`session.idle`）、会话多轮（`session.create/prompt/abort/fork/messages`）、**权限确认流**（`permission.updated` + 回执端点 `POST /session/{id}/permissions/{permissionID}`）。
+任何具备"本地服务 + SSE 事件流 + 会话 API + 权限确认端点"四件套的 harness，都可仿 Codex 适配器接入侧边栏。已在仓库内验证的样例（以 opencode SDK 为例，仅作能力模板，不代表目标平台）：
 
-**路径**：仿 Codex 适配器新增 `canvas-agent/src/agent/opencode.ts`——起 opencode server → `session.create`+`session.prompt` → 订阅事件流，映射为现有 `turn.*/item.*` 与审批卡（即落方案 b 的通用 turn 端点后，opencode 是第一个受益客户端）。
-- 风险：SDK 迭代快（1.18.30）；opencode 侧作为客户端调画布 MCP 的审批策略需另行确认（`.opencode/opencode.json` 未配置 permission 项）。
+`@opencode-ai/sdk@1.18.30` 在依赖树中（`.opencode/package-lock.json:129-131`），其能力面：`createOpencodeServer`（`node_modules/@opencode-ai/sdk/dist/server.d.ts:17`）、SSE 事件流（`message.part.updated`/`session.status`/`session.idle`）、会话多轮（`session.create/prompt/abort/fork/messages`）、**权限确认流**（`permission.updated` + 回执端点 `POST /session/{id}/permissions/{permissionID}`）。
+
+**通用路径**：新增 `canvas-agent/src/agent/<harness>.ts` 适配器——起 harness 本地服务 → 创建会话并投递 prompt → 订阅事件流，映射为现有 `turn.*/item.*` 与审批卡（即落方案 b 的通用 turn 端点后，所有 harness 按同一映射表接入）。
+- 风险：各 SDK 迭代快；客户端侧作为 MCP 消费端调画布工具的审批策略需逐家确认。
 
 ## 6. 建议
 
-**a → b → (视需求) c**：a 立即做（顺手可捎上插件 MCP 工具方案，两者都动 `schemas.ts`/`session.ts`）；b 按官方规划用 Claude Agent SDK 补齐，做完后 opencode 适配是增量工作；c 仅长期多 harness 战略下启动，事件名尽量"只增不改"规避协议升版。
+**a → b → (视需求) c**：a 立即做（顺手可捎上插件 MCP 工具方案，两者都动 `schemas.ts`/`session.ts`）；b 按官方规划用 Claude Agent SDK 补齐，做完后其余 harness 按第 5 节通用路径做适配器皆为增量工作；c 仅长期多 harness 战略下启动，事件名尽量"只增不改"规避协议升版。

@@ -1,7 +1,7 @@
 # Infinite Canvas MCP 工具清单 / MCP Tool Reference
 
 > 权威来源 / Source of truth：`infinite-canvas/canvas-agent/src/canvas/schemas.ts`（`toolNames` + `toolInputSchemas` + `toolDescriptions`）。
-> 本文为中英对照的只读清单；参数细节以 schemas.ts 为准。协议入口：本机 `127.0.0.1:17371`，MCP 启动命令 `npx -y @basketikun/canvas-agent@latest mcp`，opencode 注册见 `.opencode/opencode.json`。
+> 本文为中英对照的只读清单；参数细节以 schemas.ts 为准。协议入口：本机 `127.0.0.1:17371`，MCP 启动命令 `npx -y @basketikun/canvas-agent@latest mcp`。本工具集对任意 MCP 客户端开放（协议无关），注册示例见 `.opencode/opencode.json`（其他客户端同理）。
 > This is a read-only bilingual reference. Parameter details follow `schemas.ts`. Local endpoint: `127.0.0.1:17371`; MCP command: `npx -y @basketikun/canvas-agent@latest mcp`.
 
 共 34 个工具 / 34 tools in total.

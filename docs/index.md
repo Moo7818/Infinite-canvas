@@ -15,10 +15,10 @@
 | [插件开发指南](./plugin-dev-guide.md) | 插件契约/宿主机制/ctx 能力/工程流/批量约定 |
 | [Grsai 渠道集成](./grsai-integration.md) | 接口行为/三故障判定/版本确认/async 状态 |
 | [MCP 工具清单](./mcp-tools.md) | 画布 MCP 34 工具中英对照/参数/边界 |
-| [MCP 调研简报](./mcp-research/MCP调研简报.md) | libtv 对比/插件工具扩展/harness 适配三线结论与待拍板项 |
-| [libtv MCP 能力对比](./mcp-research/libtv-MCP能力对比.md) | libtv 85 工具面 vs 本 MCP 34 工具差异与可借鉴设计 |
-| [插件 MCP 工具方案](./mcp-research/插件节点MCP工具方案.md) | 插件节点 MCP 扩展链路/候选工具/扩展点与坑 |
-| [harness 适配](./mcp-research/脱离Codex的harness适配.md) | 脱离 Codex：耦合清单/三条适配路线/opencode 路径 |
+| [MCP 调研简报](./research/MCP调研简报.md) | libtv 对比/插件工具扩展/harness 适配三线结论与待拍板项 |
+| [libtv MCP 能力对比](./research/libtv-MCP能力对比.md) | libtv 85 工具面 vs 本 MCP 34 工具差异与可借鉴设计 |
+| [插件 MCP 工具方案](./research/插件节点MCP工具方案.md) | 插件节点 MCP 扩展链路/候选工具/扩展点与坑 |
+| [harness 适配](./research/脱离Codex的harness适配.md) | 脱离 Codex：耦合清单/三条适配路线/通用接入路径 |
 | [上游摘要](./upstream-summary.md) | 上游功能/部署文档指路（不复制原文） |
 
 ## AI 行为约束（按需加载）
