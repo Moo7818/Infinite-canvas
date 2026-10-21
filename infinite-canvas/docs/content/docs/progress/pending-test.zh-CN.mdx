@@ -33,9 +33,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 - Agent 新对话响应：一轮对话完成后点击「新对话」，聊天内容应在服务端确认切换后清空并进入空白对话；后台应串行创建线程并预热 MCP，多个标签页应按同一会话版本同步，旧 HTTP 响应不得覆盖较新的 SSE 状态，初始化完成前不能发送到上一条会话或重复创建线程；重启 Agent 后应重新恢复并预热已有活动线程，无法恢复的失效空线程应自动替换为可用的新线程。
 - OpenCode harness turn 稳健性：模型下拉发送的裸模型名（无 `providerId/` 前缀）会在每轮 turn 前解析为唯一对应的 `providerId/modelID`（歧义或未知名仍走 opencode 默认模型并在日志记录 `opencode turn model`），不再静默落到已停用的 qiniu 网关；turn 失败时前端应显示真实上游错误（如 qiniu `Account is suspended`、deepseek `Insufficient Balance`）而非笼统的「opencode 会话出错」；会话级写操作端点遇到瞬时 `CONVERSATION_BUSY` 冲突时最多重试等待 2 秒（4×500ms，turn 运行中立即放弃），重启 Agent 后立刻初始化会话不再直接报「Codex 正在运行或正在切换会话」，2 秒后仍冲突则照常提示稍后重试。
 - Agent 图片附件跨轮可用：同一侧边栏标签页最近 24 张上传图片在后续轮次仍可引用（超出后淘汰最早上传的），可用 `canvas_list_attachments` 查询，turn 提示词会同时列出本轮与此前附件；附件文件写入工作空间 `.attachments/<attachmentId>.<扩展名>`（gif/webp/avif 按真实类型），不再用 `%TEMP%` 随机名、不再在 turn 结束时删除，Agent 后续仍能读取。
-
 - Agent MCP 参数容错：`metadata` / `patch` 传 JSON 字符串也能被自动解析为对象；图片字段（`faceImages`、`styleImage`、`refs` 等）会拒绝 `file://`、`blob:`、相对路径和画布节点 ID，并提示先调用 `canvas_create_attachment_nodes` 转成图片节点。
-
 - OpenCode 运行时解耦：opencode CLI 移到仓库根 `opencode-runtime/`（独立固定 `opencode-ai@1.19.3`），不再作为 canvas-agent 的依赖；Agent 以该目录为工作目录拉起 `opencode serve`，站点工作空间默认落在 `opencode-runtime/workspace/site/`，迁移后的历史会话仍能出现在侧边栏；可通过 `canvas-agent.json` 的 `opencodeRuntimeDir` 或环境变量 `OPENCODE_RUNTIME_DIR` 改位置。
 - OpenCode 模型列表范围：Agent 模型下拉只展示 opencode 官方免费模型（`opencode/*-free`，共 9 个），其他 provider 的凭据不再配置，避免误选账户已停用或欠费的模型。
 - Agent 读取画布卡片：读取当前画布完成后，卡片应按非零类型显示文本、图片、配置、视频、音频、分组、其他节点及连线数量，例如「3 个文本、5 张图片、2 个配置、4 条连线」；空画布应显示「当前画布为空」，执行失败时仍应显示错误信息，刷新恢复历史后统计保持一致。

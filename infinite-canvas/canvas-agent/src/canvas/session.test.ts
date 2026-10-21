@@ -530,7 +530,6 @@ test("切换活动线程会清除上一线程的实时快照", (t) => {
     assert.deepEqual(client.events("agent_event"), []);
 });
 
-/** 创建用于测试的画布 SSE 连接。 */
 test("图片附件跨 turn 保留并可列出", () => {
     const session = new CanvasSession();
     session.setTurnAttachments("first", [{ id: "attachment-1", name: "商品.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }]);
@@ -589,6 +588,7 @@ test("图片字段拒绝本地路径、blob 和节点 ID", async (t) => {
     assert.equal(first.event("tool_call"), undefined);
 });
 
+/** 创建用于测试的画布 SSE 连接。 */
 function connect(session: CanvasSession, clientId: string, activeThreadId = "") {
     const response = new FakeSseResponse();
     session.openEvents(new URL(`http://127.0.0.1/events?clientId=${clientId}`), response as unknown as ServerResponse, activeThreadId);
